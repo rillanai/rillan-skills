@@ -1,0 +1,33 @@
+apiVersion: repokeeper/v1
+kind: RepoMetadata
+repo_id: github.com/rillanai/rillan-skills
+name: Rillan Skills
+labels:
+    kind: skills
+    org: rillanai
+    role: llm-skills-installer
+entrypoints:
+    readme: README.md
+    cli: cmd/rillan-skills
+paths:
+    authoritative:
+        - cmd/rillan-skills/
+        - internal/detect/
+        - internal/install/
+        - embed.go
+        - go/
+        - rust/
+        - python/
+        - terraform/
+        - helm/
+        - kubernetes/
+        - operator/
+        - cicd/
+        - docker/
+        - adr/
+        - rfc/
+        - planning/
+        - security/
+related_repos:
+    - repo_id: github.com/skaphos/agent_resources
+      relationship: forked_from

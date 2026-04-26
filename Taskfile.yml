@@ -1,0 +1,60 @@
+# SPDX-FileCopyrightText: 2026 Rillan AI LLC
+# SPDX-License-Identifier: Apache-2.0
+
+version: "3"
+
+vars:
+  BIN_DIR: '{{.ROOT_DIR}}/bin'
+  BIN: '{{.BIN_DIR}}/rillan-skills'
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+
+  build:
+    desc: Build the rillan-skills installer binary
+    cmds:
+      - mkdir -p {{.BIN_DIR}}
+      - go build -trimpath -o {{.BIN}} ./cmd/rillan-skills
+    sources:
+      - "**/*.go"
+      - go.mod
+      - "*/*.skill.md"
+    generates:
+      - "{{.BIN}}"
+
+  vet:
+    desc: Run go vet across the module
+    cmds:
+      - go vet ./...
+
+  test:
+    desc: Run unit tests
+    cmds:
+      - go test ./...
+
+  install:
+    desc: Install the binary into ~/.local/bin
+    deps: [build]
+    cmds:
+      - install -m 0755 {{.BIN}} {{.HOME}}/.local/bin/rillan-skills
+      - echo "installed to {{.HOME}}/.local/bin/rillan-skills"
+
+  detect:
+    desc: Run detection against the current directory (for development)
+    deps: [build]
+    cmds:
+      - "{{.BIN}} detect --target ."
+
+  list:
+    desc: List all skills bundled in the binary
+    deps: [build]
+    cmds:
+      - "{{.BIN}} list"
+
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - rm -rf {{.BIN_DIR}}

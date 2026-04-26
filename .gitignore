@@ -1,0 +1,30 @@
+# Build output
+/bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go test / coverage artifacts
+*.test
+*.out
+coverage.*
+/vendor/
+
+# Per-user Claude settings (shared settings live in settings.json)
+.claude/settings.local.json
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# direnv
+.envrc.local
