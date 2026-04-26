@@ -23,6 +23,7 @@ const skillsRoot = "skills"
 // Tool identifies which assistant to install for.
 type Tool string
 
+// Supported tool identifiers.
 const (
 	ToolClaude   Tool = "claude"
 	ToolCodex    Tool = "codex"
@@ -116,17 +117,17 @@ func destPath(t Tool, target string, s Skill) string {
 }
 
 func writeFile(path string, contents []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil { //nolint:gosec // skills are intentionally world-readable in the user's home
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".skaphos-*.tmp")
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".rillan-skills-*.tmp")
 	if err != nil {
 		return err
 	}
 	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
+	defer func() { _ = os.Remove(tmpName) }()
 	if _, err := io.Copy(tmp, strings.NewReader(string(contents))); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return err
 	}
 	if err := tmp.Close(); err != nil {
@@ -208,7 +209,7 @@ func extractFrontmatter(body []byte) string {
 // readVersion returns the version comment of an installed skill file if it
 // exists, used for idempotent installs.
 func readVersion(path string) (string, bool) {
-	b, err := os.ReadFile(path)
+	b, err := os.ReadFile(path) //nolint:gosec // path is constructed from the configured target dir, not user-controlled at read time
 	if err != nil {
 		return "", false
 	}

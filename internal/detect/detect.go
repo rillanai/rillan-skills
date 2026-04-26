@@ -90,8 +90,8 @@ type hits struct {
 	dirs  map[string]bool
 }
 
-func (h *hits) has(name string) bool       { return h.files[name] }
-func (h *hits) hasDir(name string) bool    { return h.dirs[name] }
+func (h *hits) has(name string) bool    { return h.files[name] }
+func (h *hits) hasDir(name string) bool { return h.dirs[name] }
 func (h *hits) hasGlob(pattern string) bool {
 	for f := range h.files {
 		ok, _ := filepath.Match(pattern, filepath.Base(f))
@@ -107,13 +107,13 @@ func (h *hits) hasGlob(pattern string) bool {
 func (h *hits) hasK8sManifest() bool {
 	for f := range h.files {
 		base := filepath.Base(f)
-		if !(strings.HasSuffix(base, ".yaml") || strings.HasSuffix(base, ".yml")) {
+		if !strings.HasSuffix(base, ".yaml") && !strings.HasSuffix(base, ".yml") {
 			continue
 		}
 		if !underAny(f, "deploy", "manifests", "k8s", "kustomize") {
 			continue
 		}
-		b, err := os.ReadFile(f)
+		b, err := os.ReadFile(f) //nolint:gosec // f comes from the user-supplied target tree we are deliberately scanning
 		if err != nil || len(b) > 64*1024 {
 			continue
 		}
@@ -145,7 +145,7 @@ func (h *hits) hasOperatorMarkers() bool {
 		if filepath.Base(f) != "go.mod" {
 			continue
 		}
-		b, err := os.ReadFile(f)
+		b, err := os.ReadFile(f) //nolint:gosec // f is a go.mod inside the user-supplied target tree
 		if err != nil {
 			continue
 		}

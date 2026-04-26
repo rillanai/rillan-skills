@@ -6,6 +6,11 @@ version: "3"
 vars:
   BIN_DIR: '{{.ROOT_DIR}}/bin'
   BIN: '{{.BIN_DIR}}/rillan-skills'
+  # Tool versions (mirror .github/workflows/ci.yml; bump together via Dependabot).
+  GOLANGCI_LINT_VERSION: v2.1.6
+  STATICCHECK_VERSION: 2025.1.1
+  GOVULNCHECK_VERSION: v1.1.4
+  GOIMPORTS_VERSION: v0.30.0
 
 tasks:
   default:
@@ -30,10 +35,53 @@ tasks:
     cmds:
       - go vet ./...
 
-  test:
-    desc: Run unit tests
+  lint:
+    desc: Run golangci-lint
     cmds:
-      - go test ./...
+      - go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@{{.GOLANGCI_LINT_VERSION}} run --timeout=5m
+
+  fmt:
+    desc: Apply goimports to the tree
+    cmds:
+      - go run golang.org/x/tools/cmd/goimports@{{.GOIMPORTS_VERSION}} -w -local github.com/rillanai/rillan-skills .
+
+  fmt-check:
+    desc: Fail if goimports would reformat any file
+    cmds:
+      - |
+        out=$(go run golang.org/x/tools/cmd/goimports@{{.GOIMPORTS_VERSION}} -l .)
+        if [ -n "$out" ]; then
+          echo "goimports drift in:"
+          echo "$out"
+          echo "Run 'task fmt' to fix."
+          exit 1
+        fi
+
+  staticcheck:
+    desc: Run staticcheck
+    cmds:
+      - go run honnef.co/go/tools/cmd/staticcheck@{{.STATICCHECK_VERSION}} ./...
+
+  vuln:
+    desc: Run govulncheck
+    cmds:
+      - go run golang.org/x/vuln/cmd/govulncheck@{{.GOVULNCHECK_VERSION}} ./...
+
+  test:
+    desc: Run unit tests with race detector and coverage
+    cmds:
+      - go test -race -coverprofile=coverage.out -covermode=atomic ./...
+
+  ci:
+    desc: Run the same checks CI runs (lint, fmt, vet, test, staticcheck, vuln, build)
+    cmds:
+      - task: lint
+      - task: fmt-check
+      - task: vet
+      - task: test
+      - task: staticcheck
+      - task: vuln
+      - task: build
 
   install:
     desc: Install the binary into ~/.local/bin
