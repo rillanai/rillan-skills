@@ -206,7 +206,7 @@ func runList(args []string) error {
 		return err
 	}
 	for _, pack := range rillanskills.Packs() {
-		entries, err := fs.ReadDir(rillanskills.Skills, pack)
+		entries, err := fs.ReadDir(rillanskills.Skills, rillanskills.SkillsRoot+"/"+pack)
 		if err != nil {
 			continue
 		}

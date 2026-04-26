@@ -11,10 +11,14 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
 )
+
+// skillsRoot is the directory inside the embedded FS where skill packs live.
+const skillsRoot = "skills"
 
 // Tool identifies which assistant to install for.
 type Tool string
@@ -139,7 +143,8 @@ var (
 func loadSkills(efs embed.FS, packs []string) ([]Skill, error) {
 	var out []Skill
 	for _, pack := range packs {
-		entries, err := fs.ReadDir(efs, pack)
+		dir := path.Join(skillsRoot, pack)
+		entries, err := fs.ReadDir(efs, dir)
 		if err != nil {
 			// Pack not embedded — skip silently rather than fail; lets the
 			// detector add forward-looking packs without breaking.
@@ -149,7 +154,7 @@ func loadSkills(efs embed.FS, packs []string) ([]Skill, error) {
 			if e.IsDir() || !strings.HasSuffix(e.Name(), ".skill.md") {
 				continue
 			}
-			src := pack + "/" + e.Name()
+			src := path.Join(dir, e.Name())
 			body, err := fs.ReadFile(efs, src)
 			if err != nil {
 				return nil, fmt.Errorf("read %s: %w", src, err)

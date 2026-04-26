@@ -15,19 +15,7 @@ paths:
         - internal/detect/
         - internal/install/
         - embed.go
-        - go/
-        - rust/
-        - python/
-        - terraform/
-        - helm/
-        - kubernetes/
-        - operator/
-        - cicd/
-        - docker/
-        - adr/
-        - rfc/
-        - planning/
-        - security/
+        - skills/
 related_repos:
     - repo_id: github.com/skaphos/agent_resources
       relationship: forked_from

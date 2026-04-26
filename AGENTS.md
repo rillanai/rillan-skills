@@ -2,35 +2,44 @@
 
 ## Project Structure & Module Organization
 
-This repository is a skills bundle plus one installer script. Language-specific skills live in `go/`, `rust/`, `python/`, `terraform/`, `helm/`, `kubernetes/`, and `operator/`, with one `*.skill.md` file per mode such as `dev`, `audit`, `docs`, `test`, and `migrate`. Go, Rust, and Python also include `policy` and `workflow` layers. The installer is `install.sh`, the main user documentation is `README.md`, and licensing metadata is in `LICENSE`.
+This repository is a skills bundle plus a Go-based installer (`rillan-skills`). All skill content lives under `skills/`, organized by pack: `skills/go/`, `skills/rust/`, `skills/python/`, `skills/terraform/`, `skills/helm/`, `skills/kubernetes/`, `skills/operator/`, plus the cross-cutting packs `skills/adr/`, `skills/cicd/`, `skills/docker/`, `skills/planning/`, `skills/rfc/`, `skills/security/`. Each pack contains one `*.skill.md` file per mode (`dev`, `audit`, `docs`, `test`, `migrate`); Go, Rust, and Python additionally have `policy`, `workflow`, and `ci` files.
+
+The installer source is in `cmd/rillan-skills/` with shared logic in `internal/detect/` and `internal/install/`. The bundled skill tree is exposed to the binary through `embed.go`. User documentation is `README.md`, licensing metadata is in `LICENSE` and `NOTICE`.
 
 ## Build, Test, and Development Commands
 
-There is no build step. Use the installer and its preview modes as the primary verification path.
+The build runner is [Task](https://taskfile.dev). Run from the repository root:
 
-- `./install.sh --list` shows detected tools and available skills.
-- `./install.sh --dry-run` previews installs without changing user directories.
-- `./install.sh --tool=codex --lang=go` tests a targeted install path.
-- `./install.sh --uninstall --tool=codex` verifies uninstall behavior for one tool.
+- `task build` — build the `rillan-skills` binary into `bin/`.
+- `task list` — list every skill bundled in the binary.
+- `task detect` — run pack detection against the repo itself.
+- `task vet` — `go vet ./...`.
+- `task test` — `go test ./...`.
+- `task install` — install the built binary into `~/.local/bin`.
+- `task clean` — remove `bin/`.
 
-Run commands from the repository root.
+For a one-off dry-run install against a sample target:
+
+```bash
+./bin/rillan-skills install --target /path/to/repo --tool claude --dry-run
+```
 
 ## Coding Style & Naming Conventions
 
-Keep Markdown direct and tool-oriented. Use short sections, imperative guidance, and fenced examples only where they add value. Skill files should remain named `<mode>.skill.md` inside the appropriate language directory. Preserve the top-of-file metadata format:
+Keep Markdown direct and tool-oriented. Use short sections, imperative guidance, and fenced examples only where they add value. Skill files must remain named `<mode>.skill.md` inside the appropriate `skills/<pack>/` directory. Preserve the top-of-file metadata format:
 
 - `<!-- SPDX-FileCopyrightText: 2026 Rillan AI LLC -->`
 - `<!-- SPDX-License-Identifier: Apache-2.0 -->`
 - `<!-- version: X.Y.Z -->`
 
-For `install.sh`, follow existing Bash style: `set -euo pipefail`, quoted variables, small functions, and 4-space indentation inside blocks.
+For Go code, follow standard `gofmt` + `go vet` conventions. Keep `cmd/rillan-skills/main.go` thin; put real logic in `internal/`.
 
 ## Testing Guidelines
 
-This repo does not use a formal test framework. Validate changes by exercising installer flows with `--list`, `--dry-run`, and a narrow real install target when safe. When editing skill files, confirm version headers are preserved and that referenced paths or commands still match the repo layout.
+Run `task vet` and `task test` before sending changes. When editing skill files, confirm the `<!-- version: X.Y.Z -->` header is preserved and that any referenced paths or commands still match the repo layout. For installer changes, exercise both `task detect` (against this repo) and a `--dry-run install --target <repo>` against a representative sample.
 
 ## Commit & Pull Request Guidelines
 
-Current history is minimal (`Initial commit`, `Import`), so prefer short, imperative commit subjects such as `Add SPDX headers to skill files` or `Clarify install examples`. Keep each commit scoped to one logical change.
+Use short, imperative commit subjects such as `Move skill packs into skills/` or `Fix wide language matrix in README`. Keep each commit scoped to one logical change. Sign commits (DCO sign-off plus SSH/GPG signature) when the project requires it.
 
-Pull requests should include a concise summary, affected directories, verification commands run, and any README updates needed for user-facing behavior changes.
+Pull requests should include a concise summary, the affected directories, the verification commands you ran, and any README updates needed for user-facing behavior changes.

@@ -21,7 +21,7 @@ tasks:
     sources:
       - "**/*.go"
       - go.mod
-      - "*/*.skill.md"
+      - "skills/*/*.skill.md"
     generates:
       - "{{.BIN}}"
 

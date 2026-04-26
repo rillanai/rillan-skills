@@ -7,8 +7,11 @@ package rillanskills
 
 import "embed"
 
-//go:embed adr/*.skill.md cicd/*.skill.md docker/*.skill.md go/*.skill.md helm/*.skill.md kubernetes/*.skill.md operator/*.skill.md planning/*.skill.md python/*.skill.md rfc/*.skill.md rust/*.skill.md security/*.skill.md terraform/*.skill.md
+//go:embed skills/adr/*.skill.md skills/cicd/*.skill.md skills/docker/*.skill.md skills/go/*.skill.md skills/helm/*.skill.md skills/kubernetes/*.skill.md skills/operator/*.skill.md skills/planning/*.skill.md skills/python/*.skill.md skills/rfc/*.skill.md skills/rust/*.skill.md skills/security/*.skill.md skills/terraform/*.skill.md
 var Skills embed.FS
+
+// SkillsRoot is the directory inside the embedded FS where skill packs live.
+const SkillsRoot = "skills"
 
 // Packs returns the canonical list of skill pack directories embedded into
 // the binary, in stable order.
