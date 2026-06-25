@@ -21,6 +21,10 @@ import (
 	"github.com/rillanai/rillan-skills/internal/install"
 )
 
+// version is the build version, overridden at release time via
+// -ldflags "-X main.version=...". Defaults to "dev" for local builds.
+var version = "dev"
+
 const usage = `rillan-skills — project-scoped skill installer
 
 Usage:
@@ -31,6 +35,7 @@ Commands:
   detect      Print which skill packs would be installed (filesystem scan only)
   list        List all skills bundled in this binary
   uninstall   Remove installed skill files from a target repository
+  version     Print the rillan-skills version
 
 Common flags:
   --target string   Target repository directory (default ".")
@@ -62,6 +67,9 @@ func main() {
 		err = runList(args)
 	case "uninstall":
 		err = runUninstall(args)
+	case "version", "--version", "-v":
+		fmt.Printf("rillan-skills %s\n", version)
+		return
 	case "-h", "--help", "help":
 		fmt.Print(usage)
 		return
@@ -179,7 +187,7 @@ func runInstall(args []string) error {
 	if c.dryRun {
 		verb = "would install"
 	}
-	fmt.Printf("\nrillan-skills: %s %d skill file(s) into %s\n", verb, count, c.target)
+	fmt.Printf("\nrillan-skills: %s %d skill pack(s) into %s\n", verb, count, c.target)
 	return nil
 }
 
@@ -205,19 +213,26 @@ func runList(args []string) error {
 	if err != nil {
 		return err
 	}
+	fmt.Println("Each pack installs as one root skill (SKILL.md) that routes to its mode files:")
+	fmt.Println()
 	for _, pack := range rillanskills.Packs() {
 		entries, err := fs.ReadDir(rillanskills.Skills, rillanskills.SkillsRoot+"/"+pack)
 		if err != nil {
 			continue
 		}
-		var names []string
+		var modes []string
 		for _, e := range entries {
-			if !e.IsDir() && strings.HasSuffix(e.Name(), ".skill.md") {
-				names = append(names, strings.TrimSuffix(e.Name(), ".skill.md"))
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") || e.Name() == "SKILL.md" {
+				continue
 			}
+			modes = append(modes, strings.TrimSuffix(e.Name(), ".md"))
 		}
-		sort.Strings(names)
-		fmt.Printf("%-12s %s\n", pack, strings.Join(names, ", "))
+		sort.Strings(modes)
+		desc := "single skill"
+		if len(modes) > 0 {
+			desc = "modes: " + strings.Join(modes, ", ")
+		}
+		fmt.Printf("%-12s %s\n", pack, desc)
 	}
 	return nil
 }

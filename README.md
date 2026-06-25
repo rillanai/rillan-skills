@@ -45,6 +45,29 @@ The Go, Rust, and Python stacks are layered: `workflow` is the default entrypoin
 
 ### Install the binary
 
+#### From a GitHub release (recommended)
+
+Each release attaches prebuilt binaries for Linux, macOS, and Windows (amd64 + arm64)
+plus a `checksums.txt`. Download the archive for your platform from the
+[Releases page](https://github.com/rillanai/rillan-skills/releases/latest), verify it
+against the checksums, extract, and put `rillan-skills` on your `PATH`:
+
+```bash
+# Linux x86_64 example — adjust VERSION and the os/arch suffix to taste.
+VERSION=0.1.0
+base="https://github.com/rillanai/rillan-skills/releases/download/v${VERSION}"
+curl -fsSLO "${base}/rillan-skills_${VERSION}_linux_amd64.tar.gz"
+curl -fsSLO "${base}/checksums.txt"
+sha256sum --ignore-missing -c checksums.txt
+tar -xzf "rillan-skills_${VERSION}_linux_amd64.tar.gz"
+install -m 0755 rillan-skills ~/.local/bin/rillan-skills
+rillan-skills version
+```
+
+(No Homebrew tap yet — the GitHub release archives are the supported download.)
+
+#### From source
+
 The installer is a single Go binary built from this repo:
 
 ```bash
@@ -91,49 +114,64 @@ rillan-skills uninstall --target .    # remove installed skill files
 rillan-skills uninstall --target . --tool codex --dry-run
 ```
 
+### Architecture: one root skill per concern
+
+Each pack installs as a **single root skill** (`SKILL.md`) whose frontmatter is the only
+thing your assistant loads up front. The root is a router: its body points at bundled
+`<mode>.md` files (`policy`, `workflow`, `dev`, `test`, `audit`, `docs`, `migrate`, `ci`,
+…) that the assistant reads **on demand** for the task at hand. This is progressive
+disclosure — installing the Go, cicd, and kubernetes packs adds **three** descriptions to
+the always-loaded set, not the ~20 it would take to register every mode as its own skill.
+
 ### Where skills land
 
 | Tool | Project-scoped destination |
 |---|---|
-| Claude Code | `<repo>/.claude/skills/<name>/SKILL.md` |
-| Codex | `<repo>/.codex/skills/<name>/SKILL.md` |
-| OpenCode | `<repo>/.opencode/agents/<name>.md` |
+| Claude Code | `<repo>/.claude/skills/<pack>/SKILL.md` + `<pack>/<mode>.md` |
+| Codex | `<repo>/.codex/skills/<pack>/SKILL.md` + `<pack>/<mode>.md` |
+| OpenCode | `<repo>/.opencode/agents/<pack>.md` (single file: router + all modes inlined) |
+
+Claude Code and Codex support bundled, progressively-disclosed files, so they get the
+real router + mode-file directory. OpenCode uses single-file agents, so the installer
+assembles one self-contained agent per pack with every mode inlined.
 
 ## Using Skills
 
-Once installed, skills are invoked differently depending on your tool.
+Once installed, invoke the **root** for a concern; the router loads the right mode(s).
 
 ### Claude Code
 
 ```
-> /go-workflow
-> /python-workflow
-> /terraform-test
+> /go
+> /python
+> /terraform
 ```
 
-For layered stacks, start with `workflow` and add a task mode only when needed:
+For the layered language stacks the root loads `policy.md` + `workflow.md` as the
+baseline, then the mode file matching the task:
 
 ```
-> /go-workflow Implement the new queue consumer in this repo. Follow TDD.
-> /go-workflow /go-test Add regression coverage for retry exhaustion.
+> /go Implement the new queue consumer in this repo. Follow TDD.
+> /go Add regression coverage for retry exhaustion.   # router pulls in test.md
 ```
 
 ### Codex
 
 ```
-$go-workflow
-$python-workflow
-$terraform-test
+$go
+$python
+$terraform
 ```
 
-Codex can also auto-select skills based on task descriptions when the skill's trigger conditions match.
+Codex can also auto-select a root based on the task description when its trigger
+conditions match.
 
 ### OpenCode
 
 ```
-@go-workflow
-@python-workflow
-@terraform-test
+@go
+@python
+@terraform
 ```
 
 ## Skill modes
@@ -246,13 +284,42 @@ Five layered CI/CD skills. Start with `cicd-core` (platform-agnostic) and add on
 
 ## Versioning
 
-All skills are versioned using a `<!-- version: X.Y.Z -->` comment at the top of each file. The installer detects existing installations and acts accordingly:
+Each pack is versioned by a `<!-- version: X.Y.Z -->` comment in its router `SKILL.md`. The installer keys idempotency on that version (the installed `SKILL.md` for Claude/Codex, or the assembled agent file for OpenCode):
 
 - **Same version** — skipped (use `--force` to overwrite).
-- **Different version** — overwrites with the bundled version.
+- **Different version** — overwrites the whole pack (router + mode files) with the bundled version.
 - **No prior version** — fresh install.
 
 Check what's bundled with `rillan-skills list`.
+
+This skill version is independent of the released **binary** version (see Releasing).
+
+## Releasing
+
+Releases are automated with [release-please](https://github.com/googleapis/release-please)
+and [GoReleaser](https://goreleaser.com), wired together in
+`.github/workflows/release.yml`:
+
+1. Every push to `main` updates a **release PR** that release-please maintains from
+   [Conventional Commits](https://www.conventionalcommits.org) (`feat:` → minor,
+   `fix:` → patch, `feat!:`/`BREAKING CHANGE:` → major). Use conventional-commit
+   subjects (or a conventional squash-merge title) so changes land in that PR.
+2. Merging the release PR makes release-please cut the tag (`vX.Y.Z`) and the GitHub
+   release, and emit `release_created=true`.
+3. In the **same workflow run**, GoReleaser checks out that tag and uploads the
+   cross-platform binaries + `checksums.txt` to the release it created.
+
+Running GoReleaser inside the same run (gated on `release_created`) is deliberate: a
+separate `on: push tags` workflow would not fire, because tags pushed with the default
+`GITHUB_TOKEN` do not trigger further workflows. GoReleaser uses `release.mode:
+keep-existing` and never pushes, moves, or deletes the tag — so the pipeline is safe
+under tag-protection rules that forbid mutating a tag after it is cut.
+
+**First release.** The manifest (`.release-please-manifest.json`) starts at `0.0.0`. To
+cut a specific first version regardless of commit history, land a commit with a
+`Release-As: 0.1.0` footer (or edit the version in the release PR before merging).
+Validate the release config locally with `task release:check`; dry-run the artifacts
+with `task release:snapshot`.
 
 ## Directory Structure
 
@@ -263,20 +330,24 @@ Check what's bundled with `rillan-skills list`.
 │   ├── detect/               # filesystem-based pack detection
 │   └── install/              # skill writers per tool
 ├── embed.go                  # embeds skills/ into the binary
-├── skills/
-│   ├── adr/      └─ write.skill.md
-│   ├── cicd/     └─ azure-devops, core, github-actions, gitops, supply-chain
-│   ├── docker/   └─ image.skill.md
-│   ├── go/       └─ audit, ci, dev, docs, migrate, policy, test, workflow
-│   ├── helm/     └─ audit, dev, docs, migrate, test
-│   ├── kubernetes/ └─ audit, dev, docs, migrate, test
-│   ├── operator/ └─ audit, dev, docs, migrate, test
-│   ├── planning/ └─ decompose.skill.md
-│   ├── python/   └─ audit, ci, dev, docs, migrate, policy, test, workflow
-│   ├── rfc/      └─ write.skill.md
-│   ├── rust/     └─ audit, ci, dev, docs, migrate, policy, test, workflow
-│   ├── security/ └─ review.skill.md
-│   └── terraform/ └─ audit, dev, docs, migrate, test
+├── skills/                   # one dir per pack; SKILL.md is the router
+│   ├── adr/      └─ SKILL.md
+│   ├── cicd/     └─ SKILL.md + core, github-actions, azure-devops, gitops, supply-chain (.md)
+│   ├── docker/   └─ SKILL.md
+│   ├── go/       └─ SKILL.md + policy, workflow, dev, audit, docs, test, migrate, ci (.md)
+│   ├── helm/     └─ SKILL.md + dev, audit, docs, test, migrate (.md)
+│   ├── kubernetes/ └─ SKILL.md + dev, audit, docs, test, migrate (.md)
+│   ├── operator/ └─ SKILL.md + dev, audit, docs, test, migrate (.md)
+│   ├── planning/ └─ SKILL.md
+│   ├── python/   └─ SKILL.md + policy, workflow, dev, audit, docs, test, migrate, ci (.md)
+│   ├── rfc/      └─ SKILL.md
+│   ├── rust/     └─ SKILL.md + policy, workflow, dev, audit, docs, test, migrate, ci (.md)
+│   ├── security/ └─ SKILL.md
+│   └── terraform/ └─ SKILL.md + dev, audit, docs, test, migrate (.md)
+├── .goreleaser.yaml          # cross-platform release builds
+├── release-please-config.json
+├── .release-please-manifest.json
+├── .github/workflows/        # ci.yml, release.yml
 ├── Taskfile.yml
 ├── AGENTS.md
 └── README.md

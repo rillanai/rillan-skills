@@ -7,10 +7,11 @@ vars:
   BIN_DIR: '{{.ROOT_DIR}}/bin'
   BIN: '{{.BIN_DIR}}/rillan-skills'
   # Tool versions (mirror .github/workflows/ci.yml; bump together via Dependabot).
-  GOLANGCI_LINT_VERSION: v2.1.6
-  STATICCHECK_VERSION: 2025.1.1
-  GOVULNCHECK_VERSION: v1.1.4
-  GOIMPORTS_VERSION: v0.30.0
+  GOLANGCI_LINT_VERSION: v2.12.2
+  STATICCHECK_VERSION: v0.7.0
+  GOVULNCHECK_VERSION: v1.5.0
+  GOIMPORTS_VERSION: v0.47.0
+  GORELEASER_VERSION: v2.16.0
 
 tasks:
   default:
@@ -102,7 +103,17 @@ tasks:
     cmds:
       - "{{.BIN}} list"
 
+  release:check:
+    desc: Validate the GoReleaser config without building
+    cmds:
+      - go run github.com/goreleaser/goreleaser/v2@{{.GORELEASER_VERSION}} check
+
+  release:snapshot:
+    desc: Build a local snapshot release into dist/ (no tag, no publish)
+    cmds:
+      - go run github.com/goreleaser/goreleaser/v2@{{.GORELEASER_VERSION}} release --snapshot --clean
+
   clean:
     desc: Remove build artifacts
     cmds:
-      - rm -rf {{.BIN_DIR}}
+      - rm -rf {{.BIN_DIR}} dist

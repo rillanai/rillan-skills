@@ -86,8 +86,15 @@ func Run(target string) (Result, error) {
 }
 
 type hits struct {
+	root  string // target root; relative file keys are resolved against it for content reads
 	files map[string]bool
 	dirs  map[string]bool
+}
+
+// abs resolves a recorded (slash-relative) file key to an absolute path under
+// the scanned root, so content sniffs work regardless of the process CWD.
+func (h *hits) abs(rel string) string {
+	return filepath.Join(h.root, filepath.FromSlash(rel))
 }
 
 func (h *hits) has(name string) bool    { return h.files[name] }
@@ -113,7 +120,7 @@ func (h *hits) hasK8sManifest() bool {
 		if !underAny(f, "deploy", "manifests", "k8s", "kustomize") {
 			continue
 		}
-		b, err := os.ReadFile(f) //nolint:gosec // f comes from the user-supplied target tree we are deliberately scanning
+		b, err := os.ReadFile(h.abs(f)) //nolint:gosec // f comes from the user-supplied target tree we are deliberately scanning
 		if err != nil || len(b) > 64*1024 {
 			continue
 		}
@@ -145,7 +152,7 @@ func (h *hits) hasOperatorMarkers() bool {
 		if filepath.Base(f) != "go.mod" {
 			continue
 		}
-		b, err := os.ReadFile(f) //nolint:gosec // f is a go.mod inside the user-supplied target tree
+		b, err := os.ReadFile(h.abs(f)) //nolint:gosec // f is a go.mod inside the user-supplied target tree
 		if err != nil {
 			continue
 		}
@@ -168,8 +175,8 @@ func underAny(path string, dirs ...string) bool {
 // scan walks the target up to a reasonable depth and records files and dirs.
 // Skips vendored/build/.git directories and anything beyond depth 6.
 func scan(root string) (*hits, error) {
-	h := &hits{files: map[string]bool{}, dirs: map[string]bool{}}
 	root = filepath.Clean(root)
+	h := &hits{root: root, files: map[string]bool{}, dirs: map[string]bool{}}
 	rootDepth := strings.Count(root, string(os.PathSeparator))
 
 	skip := map[string]bool{
