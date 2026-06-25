@@ -1,0 +1,54 @@
+# SPDX-FileCopyrightText: 2026 Rillan AI LLC
+# SPDX-License-Identifier: Apache-2.0
+#
+# GoReleaser builds the cross-platform binaries and uploads them as assets to
+# the GitHub release that release-please already created. It runs in the same
+# workflow run as release-please (see .github/workflows/release.yml), gated on
+# release_created — so it never pushes or moves a tag, and the GITHUB_TOKEN
+# event-cascade limitation does not apply.
+#
+# Validate locally with `task release:check`; dry-run artifacts with
+# `task release:snapshot`.
+version: 2
+
+project_name: rillan-skills
+
+builds:
+  - id: rillan-skills
+    main: ./cmd/rillan-skills
+    binary: rillan-skills
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+      - LICENSE
+      - NOTICE
+
+checksum:
+  name_template: checksums.txt
+
+# release-please owns the tag and the GitHub release for this version; only add
+# assets to the existing release. Never create, replace, or delete it — this is
+# what keeps GoReleaser from mutating a tag that has already been cut.
+release:
+  mode: keep-existing
+
+# release-please owns the changelog (CHANGELOG.md); do not let GoReleaser write
+# release notes on top of it.
+changelog:
+  disable: true
