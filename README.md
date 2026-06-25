@@ -347,7 +347,7 @@ with `task release:snapshot`.
 ├── .goreleaser.yaml          # cross-platform release builds
 ├── release-please-config.json
 ├── .release-please-manifest.json
-├── .github/workflows/        # ci.yml, release.yml
+├── .github/workflows/        # ci.yml, codeql.yml, release.yml
 ├── Taskfile.yml
 ├── AGENTS.md
 └── README.md
