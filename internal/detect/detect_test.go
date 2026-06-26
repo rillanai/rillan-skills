@@ -67,6 +67,63 @@ func TestDetectByMarker(t *testing.T) {
 	}
 }
 
+func TestDetectHCPTerraform(t *testing.T) {
+	// A cloud {} block alongside plain Terraform sources triggers both packs.
+	cloud := map[string]string{
+		"main.tf":    "resource {}\n",
+		"backend.tf": "terraform {\n  cloud {\n    organization = \"acme\"\n  }\n}\n",
+	}
+	r, err := Run(writeTree(t, cloud))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{"terraform", "hcp-terraform"} {
+		if !slices.Contains(r.Packs, p) {
+			t.Errorf("want pack %q for cloud block, got %v", p, r.Packs)
+		}
+	}
+
+	// An app.terraform.io registry source also triggers the overlay.
+	reg := map[string]string{
+		"main.tf": "module \"net\" {\n  source = \"app.terraform.io/acme/net/aws\"\n}\n",
+	}
+	r2, err := Run(writeTree(t, reg))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(r2.Packs, "hcp-terraform") {
+		t.Errorf("want hcp-terraform for app.terraform.io source, got %v", r2.Packs)
+	}
+
+	// The tfe provider / tfe_* resources trigger the overlay too — covers
+	// self-hosted TFE and workspace-management repos with no app.terraform.io.
+	tfe := map[string]string{
+		"workspaces.tf": "resource \"tfe_workspace\" \"app\" {\n  organization = \"acme\"\n}\n",
+	}
+	r3, err := Run(writeTree(t, tfe))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(r3.Packs, "hcp-terraform") {
+		t.Errorf("want hcp-terraform for tfe_* resource, got %v", r3.Packs)
+	}
+
+	// Plain Terraform with no TFC markers must NOT trigger the overlay.
+	r4, err := Run(writeTree(t, map[string]string{"main.tf": "resource \"aws_s3_bucket\" \"b\" {}\n"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(r4.Packs, "hcp-terraform") {
+		t.Errorf("hcp-terraform should not trigger without TFC markers, got %v", r4.Packs)
+	}
+
+	// Overlay is emitted after its base in the stable pack order.
+	ti, hi := slices.Index(r.Packs, "terraform"), slices.Index(r.Packs, "hcp-terraform")
+	if ti < 0 || hi < 0 || hi < ti {
+		t.Errorf("want terraform before hcp-terraform in pack order, got %v", r.Packs)
+	}
+}
+
 func TestDetectOperator(t *testing.T) {
 	// Detection keys on a path containing "/api/" (i.e. api nested under another
 	// dir) plus a controller-runtime dependency in go.mod.

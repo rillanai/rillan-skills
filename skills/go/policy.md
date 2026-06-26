@@ -1,7 +1,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Rillan AI LLC -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-<!-- version: 3.0.0 -->
+<!-- version: 3.1.0 -->
 # Go Engineering Policy
 
 ## Purpose
@@ -74,10 +74,11 @@ This skill is tool-agnostic and works with Claude Code, Codex, OpenCode, and sim
 
 ## Error Handling
 - Return errors; do not hide them.
-- Wrap errors with useful operation context when crossing meaningful boundaries.
+- Wrap errors with useful operation context using `fmt.Errorf("...: %w", err)` when crossing meaningful boundaries.
 - Handle errors at the boundary and avoid duplicate logging.
 - Use sentinel errors or typed errors when callers need branching behavior.
-- Do not string-match error text.
+- Branch on errors with `errors.Is`/`errors.As`, never by string-matching error text.
+- Aggregate multiple failures (validation, cleanup, multi-goroutine collection) with `errors.Join`.
 
 ## Context
 - Put `ctx context.Context` first when context is needed.
@@ -91,6 +92,8 @@ This skill is tool-agnostic and works with Claude Code, Codex, OpenCode, and sim
 - Select on `ctx.Done()` in long-running goroutines.
 - Protect shared mutable state deliberately.
 - Make timeout, retry, idempotency, and drain behavior explicit.
+- Default to `golang.org/x/sync/errgroup` with `SetLimit` for bounded concurrent fan-out — it gives context cancellation and first-error propagation for free.
+- Use `sync.OnceFunc`/`sync.OnceValue` for lazy one-time initialization instead of hand-rolled `sync.Once` plus a guard.
 
 ## Configuration
 - Load configuration at startup into typed structs.
@@ -99,11 +102,21 @@ This skill is tool-agnostic and works with Claude Code, Codex, OpenCode, and sim
 - Do not scatter `os.Getenv` reads across the codebase.
 
 ## Logging And Observability
-- Use structured logging in production code.
+- Use `log/slog` for structured logging; it is the stdlib default for new code.
+- Reach for third-party loggers (`zap`, `zerolog`, `logrus`) only with a justification; place existing ones behind an `slog.Handler` so call sites stay slog-native.
 - Log at meaningful operation boundaries.
 - Include correlation identifiers when available.
 - Never log secrets, tokens, or sensitive payloads by default.
 - Write code so metrics and tracing can be added at meaningful boundaries.
+
+## Modern Idioms
+- Use range-over-func iterators (`iter.Seq`, `iter.Seq2`) for custom sequences instead of exposing channels or slice-builders.
+- Use the `min`, `max`, and `clear` builtins and `for range n` integer loops instead of hand-rolled equivalents.
+- Reach for generics in container and utility code instead of pre-generics `interface{}`.
+- Apply these mechanically with the `gopls modernize` analyzer rather than rewriting by hand.
+
+## Performance
+- For CPU-bound services with a representative workload, profile-guided optimization (PGO) is the lever: drop a `default.pgo` next to `main` (stable since Go 1.21) and the build uses it automatically.
 
 ## Security
 - Treat all external input as untrusted.

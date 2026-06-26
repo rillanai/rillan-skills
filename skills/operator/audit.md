@@ -1,7 +1,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Rillan AI LLC -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-<!-- version: 3.0.0 -->
+<!-- version: 3.1.0 -->
 # Kubernetes Operator Audit Deep Dive
 
 ## Purpose
@@ -11,7 +11,7 @@ Apply this skill with:
 - `go/policy.md` for general Go evaluation standards
 - `go/workflow.md` for tool-first execution discipline
 
-This skill overlays Go audit discipline with controller-specific concerns around APIs, reconciliation, status, finalizers, webhooks, and lifecycle safety.
+This skill overlays Go audit discipline with controller-specific concerns around APIs, reconciliation, status, finalizers, admission control (CRD schema validation, ValidatingAdmissionPolicy, and webhooks), and lifecycle safety.
 
 ## Skill Use
 - Load this skill when the user explicitly wants a deep operator audit.
@@ -58,7 +58,7 @@ If scope or phase is missing, stop and ask.
 - Describe controller behavior as implemented, not as intended.
 - Stay phase-disciplined.
 - Separate generic Go issues from controller-specific design issues.
-- Treat API types, reconcilers, predicates, watches, webhooks, tests, generated artifacts, and manifests as first-class evidence.
+- Treat API types, reconcilers, predicates, watches, admission policies (`ValidatingAdmissionPolicy`/`ValidatingAdmissionPolicyBinding`), webhooks, CRD CEL validations, tests, generated artifacts, and manifests as first-class evidence.
 
 ## Evidence Rules
 - Every factual claim must be anchored to a file path and, when applicable, a type, reconciler, controller, webhook, test, or generated artifact.
@@ -93,7 +93,7 @@ NEXT: <exact next phase name>
 
 ## General Audit Method
 1. Establish accessible scope and obvious exclusions.
-2. Build a fast inventory of APIs, versions, controllers, watches, predicates, webhooks, generated artifacts, and operational assets.
+2. Build a fast inventory of APIs, versions, controllers, watches, predicates, admission control (CRD CEL validations, `ValidatingAdmissionPolicy`/bindings, validating/mutating webhooks), generated artifacts, and operational assets.
 3. Read the files relevant to the current phase before making conclusions.
 4. Build inventories or evidence tables before evaluative claims.
 5. Preserve phase boundaries strictly.
@@ -109,9 +109,9 @@ NEXT: <exact next phase name>
 
 ### PHASE 1 - Inventory + Operator Surface
 Produce:
-- repository inventory grouped by API package, controller package, webhook package, generated artifacts, and operational assets
-- one-line purpose for each API version, controller, webhook, watch setup, generated manifest set, and test area
-- entrypoint summary: manager setup, controller registration, webhook registration, and generated output where evidenced
+- repository inventory grouped by API package, controller package, admission-control surface (CRD CEL validations, `ValidatingAdmissionPolicy`/binding manifests, webhook package), generated artifacts, and operational assets
+- one-line purpose for each API version, controller, admission policy, webhook, watch setup, generated manifest set, and test area
+- entrypoint summary: manager setup, controller registration, admission-policy and webhook registration, and generated output where evidenced
 - totals and `UNREVIEWED/INACCESSIBLE`
 
 ### PHASE 2 - API + Controller Accounting
@@ -120,8 +120,8 @@ Produce exactly:
 - `api_index.csv`
 
 Rules:
-- include one row per reconciler, controller registration, webhook handler, and notable watch or predicate boundary
-- include one row per CRD type, version, status surface, condition model, and conversion or defaulting boundary where applicable
+- include one row per reconciler, controller registration, admission policy (`ValidatingAdmissionPolicy`), webhook handler, and notable watch or predicate boundary
+- include one row per CRD type, version, status surface, condition model, CEL validation rule set, and conversion or defaulting boundary where applicable
 - chunk outputs to 500 rows max per file part
 - leave ownership or runtime fields blank when precision is not supportable and note `INFERENCE`
 
@@ -137,19 +137,29 @@ Using phase 1 and 2 evidence:
 ### PHASE 4 - Safety + Operability Findings
 Review:
 - leader election, concurrency, rate limiting, metrics, events, and log quality
-- webhook safety, validation and defaulting placement, and generated-artifact drift risk
+- admission-control design and placement:
+  - flag any **validating webhook performing validation expressible in CEL** (field/shape/immutability/cross-field, parameterized policy) as a modernization finding — the current best practice is `ValidatingAdmissionPolicy` (GA in Kubernetes 1.30): in-process, no webhook server, no TLS/cert lifecycle, no API-path availability risk. Reserve validating webhooks for checks CEL cannot express (external lookups, stateful Go logic).
+  - flag single-object validation done in a webhook that belongs in the **CRD schema** (`x-kubernetes-validations`/OpenAPI constraints) instead.
+  - for existing `ValidatingAdmissionPolicy` resources, check `failurePolicy` (fail-closed where safety requires), `validationActions` (`Deny` vs observe-only `Warn`/`Audit`), `paramRef`/binding correctness, CEL cost/correctness, and that the binding is shipped alongside the policy.
+  - for remaining webhooks, check `failurePolicy`, `timeoutSeconds`, `namespaceSelector`/`objectSelector` scoping, certificate management, and availability coupling to the API server.
+  - defaulting placement: prefer CRD schema defaults; note mutating webhooks that could be schema defaults. Treat `MutatingAdmissionPolicy` as emerging/feature-gated, not yet a portable default.
+- metrics auth: flag any remaining **kube-rbac-proxy sidecar** as a modernization finding — it is deprecated/removed upstream; migrate to the built-in authenticated metrics endpoint (`metricsserver.Options{SecureServing, FilterProvider: filters.WithAuthenticationAndAuthorization}`).
+- leader-election lease *configuration*, not just presence: check `LeaseDuration`/`RenewDeadline`/`RetryPeriod` are tuned for API-server latency and that `LeaderElectionReleaseOnCancel` is set for prompt failover.
+- write idiom: check whether owned-resource and status writes use **server-side apply with an explicit `client.FieldOwner`** (and `ForceOwnership` where authoritative) rather than racy read-modify-`Update`.
+- conditions model: check that conditions use the `[]metav1.Condition` / `meta.SetStatusCondition` standard, and that `observedGeneration` is written into status and each condition with a `status.observedGeneration == metadata.generation` freshness contract.
+- generated-artifact drift risk
 - controller failure isolation, retry behavior, and unsafe side effects
 
 Output findings grouped by `P0`, `P1`, and `P2`, each with:
 - file path
-- type, controller, or webhook
+- type, controller, admission policy, or webhook
 - evidence
 - concrete fix
 
 ### PHASE 5 - Synthesis
 Produce:
 - overall grade `A-F`
-- subgrades for API design, reconciliation, status model, lifecycle safety, operability, and docs/DX
+- subgrades for API design, reconciliation, status model, lifecycle safety, admission control, operability, and docs/DX
 - anchored justification
 - prioritized recommendations with `P0`, `P1`, and `P2`
 - effort sizing `S`, `M`, `L`

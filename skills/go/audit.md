@@ -1,7 +1,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Rillan AI LLC -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-<!-- version: 3.0.0 -->
+<!-- version: 3.1.0 -->
 # Go Audit Mode
 
 ## Purpose
@@ -128,6 +128,7 @@ Rules:
 - one row per function or method, including `init`, `main`, and tests
 - chunk outputs to 500 rows max per file part
 - leave caller or callee fields blank when precision is not supportable and note `INFERENCE`
+- run `golang.org/x/tools/cmd/deadcode` to identify unreachable functions as harder evidence than reference-counting by hand
 
 ### PHASE 3 - Architecture + Data Boundaries
 Using phase 1 and 2 evidence:
@@ -143,6 +144,10 @@ Review:
 - metrics, tracing, health checks, shutdown, drain behavior
 - trust boundaries, authn/authz, input validation, injection risks, path handling, secret handling
 
+Anchor security findings to tool evidence, consistent with the "every claim from a tool" rule:
+- `govulncheck ./...` for reachability-based CVEs (a vulnerable dependency that is actually called)
+- `gosec` and `staticcheck` output for injection, path, and unsafe-use findings — cite the rule ID and line, not a paraphrase
+
 Output findings grouped by `P0`, `P1`, and `P2`, each with:
 - file path
 - symbol
@@ -156,6 +161,17 @@ Produce:
 - anchored justification
 - prioritized refactor recommendations with `P0`, `P1`, and `P2`
 - effort sizing `S`, `M`, `L`
+
+## Modernization Evidence
+When the audit covers modernization, gather evidence rather than eyeballing. Run the `modernize` analyzer (`gopls`) and `golang.org/x/tools/cmd/deadcode`, and report against this checklist:
+- `log/slog` adoption versus ad-hoc or third-party logging without an `slog.Handler` bridge
+- error wrapping with `%w` and aggregation with `errors.Join`, branching via `errors.Is`/`errors.As` rather than string matching
+- range-over-func iterators (`iter.Seq`/`iter.Seq2`) where channels or slice-builders are used for custom sequences
+- `min`/`max`/`clear` builtins and `for range n` loops versus hand-rolled equivalents
+- generics replacing `interface{}` containers and utility code
+- `go` and `toolchain` directive currency against the supported Go release window
+
+Cite the analyzer or `deadcode` output as the evidence, not a hand inspection.
 
 ## Completion Rule
 An audit response is incomplete if it:

@@ -1,7 +1,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Rillan AI LLC -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-<!-- version: 3.0.0 -->
+<!-- version: 3.1.0 -->
 # Go Migration Mode
 
 ## Purpose
@@ -59,12 +59,17 @@ Do not use this skill for:
 - check CI, Docker images, and pinned tooling versions
 - run repository-standard tests and static analysis after the upgrade
 - adopt new language features only after the version upgrade is stable
+- apply post-upgrade modernizations mechanically with the `gopls` `modernize` analyzer and `go fix` rather than rewriting by hand
+- migrate dev tools (`golangci-lint`, `mockgen`, generators) into `go.mod` `tool` directives with `go get -tool` (Go 1.24+) so toolchain versions are pinned and reproducible
 
 ### Dependency Migrations
 - map old import paths, call sites, types, and behavior contracts
 - prefer drop-in replacement when behavior is truly compatible
 - otherwise use adapters or temporary interfaces at the consumption boundary
 - do not leave dual-dependency coexistence in place indefinitely
+- drive the bump with `go get -u`, then settle the graph with `go mod tidy`; use `go mod why` to confirm why a transitive dependency is still pulled in
+- re-run `govulncheck ./...` after any version bump to catch newly introduced advisories
+- detect breaking API changes against semver with `golang.org/x/exp/cmd/gorelease` (apidiff) before relying on a new version
 
 ### Framework Migrations
 - inventory handlers, middleware, route behavior, and dependency wiring

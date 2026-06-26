@@ -11,9 +11,22 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 )
+
+// cloudBlock matches a HashiCorp `cloud {` block (HCP Terraform / Terraform
+// Cloud execution backend), anchored at line start to avoid matching
+// identifiers like `cloudfront` or `icloud`.
+var cloudBlock = regexp.MustCompile(`(?m)^\s*cloud\s*\{`)
+
+// tfeProvider matches use of the `tfe` provider — the provider block, its
+// required_providers source (`hashicorp/tfe`), or any quoted `tfe_*` resource
+// or data type (e.g. `data "tfe_outputs"`, `resource "tfe_workspace"`). This
+// catches self-hosted TFE and workspace-management repos that never reference
+// app.terraform.io.
+var tfeProvider = regexp.MustCompile(`provider\s+"tfe"|hashicorp/tfe|"tfe_\w`)
 
 // Result is the outcome of a detection pass over a target directory.
 type Result struct {
@@ -54,6 +67,11 @@ func Run(target string) (Result, error) {
 	}
 	if hits.hasGlob("*.tf") || hits.has("terraform.tfvars") {
 		add("terraform", "Terraform sources present")
+		// HCP Terraform / Terraform Cloud is an overlay on top of terraform:
+		// a `cloud {}` block, an app.terraform.io reference, or tfe_outputs.
+		if hits.hasHCPTerraform() {
+			add("hcp-terraform", "HCP Terraform / Terraform Cloud usage detected")
+		}
 	}
 	if hits.has("Chart.yaml") {
 		add("helm", "Chart.yaml present")
@@ -77,7 +95,8 @@ func Run(target string) (Result, error) {
 
 	// Stable order
 	r.Packs = append(r.Packs, crossCutting...)
-	for _, p := range []string{"cicd", "docker", "go", "helm", "kubernetes", "operator", "python", "rust", "terraform"} {
+	// hcp-terraform follows terraform: it is an overlay loaded after the base.
+	for _, p := range []string{"cicd", "docker", "go", "helm", "kubernetes", "operator", "python", "rust", "terraform", "hcp-terraform"} {
 		if _, ok := r.Reasons[p]; ok {
 			r.Packs = append(r.Packs, p)
 		}
@@ -157,6 +176,28 @@ func (h *hits) hasOperatorMarkers() bool {
 			continue
 		}
 		if strings.Contains(string(b), "sigs.k8s.io/controller-runtime") {
+			return true
+		}
+	}
+	return false
+}
+
+// hasHCPTerraform detects HCP Terraform / Terraform Cloud usage in any .tf
+// file: a `cloud {}` execution-backend block, an app.terraform.io registry or
+// state reference, or the tfe provider / tfe_outputs data source.
+func (h *hits) hasHCPTerraform() bool {
+	for f := range h.files {
+		if !strings.HasSuffix(f, ".tf") {
+			continue
+		}
+		b, err := os.ReadFile(h.abs(f)) //nolint:gosec // f is a .tf file inside the user-supplied target tree we are deliberately scanning
+		if err != nil || len(b) > 256*1024 {
+			continue
+		}
+		s := string(b)
+		if strings.Contains(s, "app.terraform.io") ||
+			cloudBlock.MatchString(s) ||
+			tfeProvider.MatchString(s) {
 			return true
 		}
 	}

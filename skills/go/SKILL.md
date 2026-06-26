@@ -23,7 +23,7 @@ Do not guess a mode file's contents — read it.
 - `audit.md` — explicit, phased, evidence-based deep audit. User supplies repo path + phase.
 - `docs.md` — godoc, package docs, READMEs, ADRs, runbooks, changelogs.
 - `migrate.md` — Go version upgrades, dependency/framework swaps, package or service extraction.
-- `ci.md` — CI for a Go project (lint, vet, race-test, coverage, vuln, static analysis, release).
+- `ci.md` — CI for a Go project (lint, vet, race-test, parallel/shuffled tests, fuzz, coverage, vuln, static analysis, build-time discipline, release).
 
 Cross-pack pointers use path form, e.g. `cicd/core.md`. Stricter repository-local
 conventions win when they are explicit and defensible.

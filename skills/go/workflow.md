@@ -1,7 +1,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Rillan AI LLC -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-<!-- version: 3.0.0 -->
+<!-- version: 3.1.0 -->
 # Go Engineering Workflow
 
 ## Purpose
@@ -62,6 +62,7 @@ Use these categories when reasoning or reporting:
 ## Repository Workflow Discovery
 Before running default commands, inspect the repository for its canonical workflow:
 - `go.mod`
+- `go.work` (a multi-module workspace changes how `./...` resolves and how builds select modules; scope commands accordingly)
 - `Makefile`, `Taskfile.yml`, `magefiles`, or scripts
 - CI definitions
 - lint or static-analysis configuration
@@ -226,6 +227,8 @@ When repository-specific commands are not provided, prefer:
 - static analysis when present in repository workflow:
   - `go vet ./...`
   - `staticcheck ./...`
+- vulnerability scanning for dependency- or security-relevant changes:
+  - `govulncheck ./...`
 
 ## Typical Risk Levels
 

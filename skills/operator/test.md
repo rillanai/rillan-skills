@@ -1,7 +1,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Rillan AI LLC -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-<!-- version: 3.0.0 -->
+<!-- version: 3.1.0 -->
 # Kubernetes Operator Test Strategy And Generation
 
 ## Purpose
@@ -21,7 +21,8 @@ This skill is tool-agnostic and works with Claude Code, Codex, OpenCode, and sim
 - pure Go unit tests for helpers, predicates, mapping functions, and condition logic
 - focused reconciler tests for branching, retries, and error handling
 - `envtest` for API server backed reconciliation behavior
-- webhook tests for validation and defaulting
+- admission-control tests: CRD CEL validations (`x-kubernetes-validations`) and `ValidatingAdmissionPolicy` enforcement exercised through `envtest`, since both run in the API server
+- webhook tests for validation and defaulting (for the cases that remain in webhooks)
 - generation checks for CRDs and manifests when code generation is part of the repo
 
 ## Guidance
@@ -29,4 +30,11 @@ This skill is tool-agnostic and works with Claude Code, Codex, OpenCode, and sim
 - Test status and conditions as part of the contract, not as incidental output.
 - Prefer deterministic fake-client tests only for narrow logic; use `envtest` when API-server semantics matter.
 - Cover deletion paths, not-found paths, partial creation, and requeue-after-error behavior.
-- Treat CRD version changes and webhooks as high-risk areas requiring explicit coverage.
+- Treat CRD version changes, admission policies, and webhooks as high-risk areas requiring explicit coverage.
+- For `ValidatingAdmissionPolicy` and CRD CEL rules, drive `envtest` with the policy + binding applied and assert that violating objects are rejected and conforming objects admitted — test the CEL the same way you'd test a webhook's deny path. Confirm `failurePolicy`/`validationActions` behave as intended, and verify the envtest API-server version actually supports VAP (GA 1.30) before relying on it.
+
+## Test Toolchain
+- Provision API-server/etcd binaries with `setup-envtest` (pin a specific Kubernetes version so VAP/ratcheting support is deterministic) and point `KUBEBUILDER_ASSETS` at its output.
+- Use Ginkgo v2 + Gomega for envtest suites; assert async reconciler effects with `Eventually`/`Consistently`, and prefer `EventuallyWithT`/`Gomega.Eventually(func(g Gomega){...})` so each poll re-fetches and re-asserts instead of closing over a stale object.
+- Know the fake client's limits: it does **not** faithfully emulate server-side apply (field managers/`ForceOwnership`) and mishandles some subresources/status semantics. Test SSA writes, conditions freshness, and admission against `envtest`, not the fake client.
+- For time-based requeue logic (`RequeueAfter`, backoff, lease timing), use `testing/synctest` (Go 1.25+) to drive a fake clock deterministically instead of real sleeps.

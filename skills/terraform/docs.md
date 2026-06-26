@@ -1,13 +1,15 @@
 <!-- SPDX-FileCopyrightText: 2026 Rillan AI LLC -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-<!-- version: 3.0.0 -->
+<!-- version: 3.1.0 -->
 # Terraform Documentation Guidance
 
 ## Purpose
 Use this skill when generating, reviewing, or maintaining documentation for Terraform codebases. This includes module READMEs, root module documentation, variable and output descriptions, architecture decision records, runbooks, changelogs, AGENTS.md contributor guidance, and environment documentation.
 
-This skill defines the documentation contract for Terraform work. It is intended for README generation, module documentation, input/output documentation, ADRs for infrastructure decisions, operational runbooks, AGENTS.md files for AI-assisted contributor guidance, TFC workspace documentation, and changelog maintenance.
+This skill defines the documentation contract for Terraform work. It is intended for README generation, module documentation, input/output documentation, ADRs for infrastructure decisions, operational runbooks, AGENTS.md files for AI-assisted contributor guidance, state-backend documentation, and changelog maintenance.
+
+This guidance is backend- and cloud-neutral and applies to Terraform or OpenTofu. When the project uses HCP Terraform / Terraform Cloud, load the `hcp-terraform` skill for the TFC-specific documentation depth (workspace documentation, variable sets, run triggers, and the TFC-UI plan/apply runbook).
 
 ## Skill Use
 - Load this skill when the task is to create, update, or review documentation for Terraform code.
@@ -31,9 +33,9 @@ Use this skill when the user asks for any of the following:
 - Module documentation including usage examples, inputs, and outputs
 - Variable or output description review and improvement
 - AGENTS.md files for contributor and AI-assistant guidance
-- TFC workspace documentation including naming conventions, cross-workspace references, and organization structure
+- State-backend documentation including naming conventions, cross-state references, and isolation-unit structure
 - Architecture Decision Records for infrastructure choices
-- Operational runbooks for Terraform and TFC workflows
+- Operational runbooks for Terraform / OpenTofu workflows
 - Changelog generation or maintenance for infrastructure changes
 - Environment documentation covering promotion flows and access requirements
 - Documentation audits or gap analysis for Terraform repositories
@@ -131,7 +133,7 @@ An AGENTS.md file should include:
 - **Provider Patterns**: Which providers are in use (e.g., azurerm, google, vsphere, infoblox, tfe), how provider aliases are structured, authentication patterns.
 - **Testing Expectations**: Where tests live, what testing framework is used (e.g., native `terraform test`), what test coverage is expected for new modules.
 - **Documentation Expectations**: What documentation must be updated when code changes, whether READMEs are hand-maintained or auto-generated.
-- **TFC Workflow Conventions**: Workspace naming patterns, how cross-workspace references work, which variables are workspace-level vs variable-set-level.
+- **Backend/Workflow Conventions**: State-unit naming patterns, how cross-state references work, where variables are supplied (tfvars, env vars, CI secrets, workspace variables). For HCP Terraform specifics, see the `hcp-terraform` skill.
 - **Commit and PR Conventions**: Commit message format, PR description requirements, required reviewers.
 
 Place AGENTS.md at the repository root for repository-wide guidance. Place additional AGENTS.md files in subdirectories when those directories have conventions that differ from the root.
@@ -141,33 +143,34 @@ Root modules (environments, stacks, deployments) require documentation that cove
 
 - **Environment Overview**: What this root module deploys and into which subscription, project, region, or datacenter.
 - **Prerequisites**: What must exist before applying — subscriptions, resource groups, bootstrap resources, service principals, network connectivity.
-- **Backend Configuration**: Where state is stored (TFC workspace, Azure Blob Storage, GCS bucket), how to access it, locking mechanism.
-- **Authentication**: How to authenticate to the provider — service principals, managed identities, service accounts, environment variables, credential files.
-- **TFC Workspace**: The TFC workspace name, organization, workspace variables, and any cross-workspace dependencies via `data "tfe_outputs"`.
-- **Deployment Procedures**: Step-by-step instructions for plan, apply, and destroy workflows including TFC UI workflows, CLI-driven runs, and any approval gates.
-- **Variable Configuration**: How variables are supplied — TFC workspace variables, variable sets, tfvars files, environment variables.
-- **Dependencies**: Other root modules, TFC workspaces, or external systems this deployment depends on.
+- **Backend Configuration**: Where state is stored (S3 bucket + key, GCS bucket + prefix, azurerm container, HCP Terraform workspace, etc.), how to access it, locking mechanism.
+- **Authentication**: How to authenticate to the provider — OIDC role assumption, service principals, managed identities, service accounts, environment variables, credential files.
+- **State/Isolation Unit**: The state unit this root module owns (workspace name, state key, prefix), where its variables come from, and any cross-state dependencies via `terraform_remote_state` (or the backend's equivalent). For HCP Terraform workspace details, see the `hcp-terraform` skill.
+- **Deployment Procedures**: Step-by-step instructions for plan, apply, and destroy workflows including CLI-driven runs, runner workflows, and any approval gates.
+- **Variable Configuration**: How variables are supplied — tfvars files, environment variables, CI secrets, backend/runner variables.
+- **Dependencies**: Other root modules, state units, or external systems this deployment depends on.
 
-### TFC Workspace Documentation
-When using Terraform Cloud as the backend, document:
+### State-Backend And Cross-State Documentation
+Whatever backend the project uses, document:
 
-- **Workspace Naming Convention**: The pattern used for workspace names (e.g., `{project}-{environment}-{component}`) and how names map to infrastructure boundaries.
-- **Organization Structure**: How workspaces are organized within the TFC organization, which teams have access, and how RBAC is configured.
-- **Cross-Workspace References**: Which workspaces share data via `data "tfe_outputs"`, the direction of data flow, and what outputs are consumed.
-- **Variable Sets**: Which variable sets are attached to which workspaces, what they contain (provider credentials, common tags, environment-specific values).
-- **Run Triggers**: Any configured run triggers between workspaces and their purpose.
-- **VCS Integration**: How workspaces are connected to VCS repositories, which branches trigger which workspaces, and working directory configuration.
+- **Naming Convention**: The pattern used for state-unit names (e.g., `{project}-{environment}-{component}`) and how names map to infrastructure boundaries.
+- **Access Structure**: Who can read state and run plan/apply, and how access is controlled (bucket/IAM policies, workspace team permissions, etc.).
+- **Cross-State References**: Which units share data via `terraform_remote_state` (or the backend's equivalent), the direction of data flow, and what outputs are consumed.
+- **Variable Supply**: Where variables and provider credentials come from (tfvars, env vars, CI secrets, secret managers).
+- **VCS/Runner Integration**: How applies are triggered, which branches deploy where, and working-directory configuration.
 
-Example cross-workspace reference documentation:
+For HCP Terraform–specific documentation (workspace organization, variable sets, run triggers), see the `hcp-terraform` skill.
+
+Example cross-state reference documentation:
 
 ```
-Workspace Dependencies:
+State Dependencies:
   platform-prod-network
-    └─ Consumed by: platform-prod-compute (via tfe_outputs: vnet_id, subnet_ids)
-    └─ Consumed by: platform-prod-database (via tfe_outputs: private_subnet_id)
+    └─ Consumed by: platform-prod-compute (via remote_state: vpc_id, subnet_ids)
+    └─ Consumed by: platform-prod-database (via remote_state: private_subnet_id)
 
   platform-prod-identity
-    └─ Consumed by: platform-prod-compute (via tfe_outputs: managed_identity_id)
+    └─ Consumed by: platform-prod-compute (via remote_state: instance_role_arn)
 ```
 
 ### Variable Documentation
@@ -206,20 +209,20 @@ variable "vm_size" {
 Every `output` block must include a `description` field. Output documentation rules:
 
 - The description must explain what the output value represents and who or what consumes it.
-- When an output is consumed by another TFC workspace via `data "tfe_outputs"`, document the consuming workspace.
+- When an output is consumed across a state boundary (via `terraform_remote_state` or the backend's equivalent), document the consuming state unit.
 - When an output contains sensitive data, the `sensitive = true` flag must be set and the description should note this.
 - For outputs that expose resource identifiers, document what resource they reference.
 
 Good:
 ```hcl
-output "vnet_id" {
-  description = "ID of the created virtual network. Consumed by the compute and database workspaces via tfe_outputs."
-  value       = azurerm_virtual_network.main.id
+output "vpc_id" {
+  description = "ID of the created VPC. Consumed by the compute and database state units via terraform_remote_state."
+  value       = aws_vpc.main.id
 }
 
 output "subnet_ids" {
-  description = "Map of subnet name to subnet ID for all subnets in the virtual network. Used by compute workspace for VM placement and database workspace for private endpoints."
-  value       = { for k, v in azurerm_subnet.main : k => v.id }
+  description = "Map of subnet name to subnet ID for all subnets in the VPC. Used by the compute unit for instance placement and the database unit for private endpoints."
+  value       = { for k, v in aws_subnet.main : k => v.id }
 }
 ```
 
@@ -227,9 +230,9 @@ output "subnet_ids" {
 ADRs for infrastructure document the reasoning behind structural decisions that are not obvious from the code alone. Infrastructure ADRs should cover:
 
 - **Module Structure Decisions**: Why resources are grouped into these modules, why certain resources are in the root module instead of a child module, why a module boundary exists where it does.
-- **Provider Decisions**: Why this cloud provider or this specific provider configuration — multi-cloud strategy, provider aliases, provider version constraints, why Azure for this workload vs GCP vs on-prem vSphere.
-- **State Strategy Decisions**: Why state is in TFC vs Azure Blob Storage, why state is split this way across workspaces, why this workspace structure.
-- **Networking Decisions**: Why this address space, why this connectivity model (peering, VPN, ExpressRoute, Cloud Interconnect), why these regions or zones.
+- **Provider Decisions**: Why this cloud provider or this specific provider configuration — multi-cloud strategy, provider aliases, provider version constraints, why one cloud for this workload vs another.
+- **State Strategy Decisions**: Why this backend (e.g., S3 vs GCS vs HCP Terraform), why state is split this way across isolation units, why this state structure.
+- **Networking Decisions**: Why this address space, why this connectivity model (peering, VPN, Direct Connect, ExpressRoute, Cloud Interconnect), why these regions or zones.
 - **Security Decisions**: Why this identity model (managed identity, service principal, service account), why these role assignments, why this secret management approach.
 - **Cost Decisions**: Why this VM sizing strategy, why reserved vs on-demand, why this autoscaling configuration.
 
@@ -251,14 +254,16 @@ What are the tradeoffs? What becomes easier? What becomes harder?
 ```
 
 ### Runbooks
-Operational runbooks document procedures that operators need to execute. Terraform runbooks must cover:
+Operational runbooks document procedures that operators need to execute. Terraform / OpenTofu runbooks must cover:
 
-- **TFC Plan and Apply Procedures**: How to trigger a plan in TFC (UI, CLI, VCS push), how to review plan output in the TFC UI, how to approve and apply, how to cancel a run, how to use the CLI-driven workflow with `terraform plan` and `terraform apply`.
-- **State Recovery**: How to recover from corrupted state in TFC, how to download state from TFC, how to restore a previous state version via the TFC UI or API, how to handle state lock conflicts.
-- **Import Procedures**: How to import existing resources into state (using `import` blocks or `terraform import`), post-import plan verification, importing into TFC-managed workspaces.
-- **Drift Remediation**: How to detect drift (TFC health checks, manual plan), how to decide between reconciling in Terraform vs accepting the drift, how to handle manual changes made outside Terraform.
-- **Incident Response for Infrastructure**: What to do when apply fails mid-way, how to handle provider outages, how to roll back a bad apply by restoring a previous state version in TFC.
-- **Access and Permissions**: How to obtain TFC access, required team membership, how to authenticate to cloud providers for local CLI runs.
+- **Plan and Apply Procedures**: How to trigger a plan (CLI, VCS push, runner), how to review plan output, how to approve and apply, how to cancel a run, the saved-plan workflow (`terraform plan -out=tfplan` then `terraform apply tfplan`).
+- **State Recovery**: How to recover from corrupted state, how to download/inspect state from the backend, how to restore a previous state version, how to handle state lock conflicts (`terraform force-unlock` as a last resort).
+- **Import Procedures**: How to import existing resources into state (using `import` blocks or `terraform import`), and post-import plan verification.
+- **Drift Remediation**: How to detect drift (scheduled plan runs, manual plan), how to decide between reconciling in Terraform vs accepting the drift, how to handle manual changes made outside Terraform.
+- **Incident Response for Infrastructure**: What to do when apply fails mid-way, how to handle provider outages, how to roll back a bad apply by restoring a previous state version.
+- **Access and Permissions**: How to obtain access to state and the execution backend, required membership, how to authenticate to cloud providers for local CLI runs.
+
+When the backend is HCP Terraform, the TFC-UI runbook steps (Confirm & Apply, Discard Run, state-history rollback) live in the `hcp-terraform` skill.
 
 Each runbook procedure should include:
 - Prerequisites
@@ -267,22 +272,21 @@ Each runbook procedure should include:
 - What to do if the step fails
 - Who to escalate to
 
-Example TFC workflow runbook entry:
+Example CLI-driven workflow runbook entry:
 
 ```markdown
-### Applying Changes via TFC
+### Applying Changes via CLI
 
-1. Push your changes to the VCS branch connected to the target workspace.
-2. Navigate to the workspace in the TFC UI.
-3. Review the auto-triggered plan. Check:
+1. Pull the latest code for the target state unit and run `terraform init`.
+2. Run `terraform plan -out=tfplan` and review the plan. Check:
    - Resource additions, changes, and destructions.
    - No unexpected "must be replaced" actions.
    - Output changes match expectations.
-4. If the plan is correct, click "Confirm & Apply" and add a comment describing the change.
-5. If the plan shows unexpected changes, click "Discard Run" and investigate.
-6. After apply completes, verify the workspace outputs and check resource health.
+3. If the plan is correct, get approval, then apply the saved plan: `terraform apply tfplan`.
+4. If the plan shows unexpected changes, stop and investigate before applying.
+5. After apply completes, verify outputs and check resource health.
 
-**Rollback**: In the TFC UI, navigate to the workspace's state history, select the previous state version, and click "Rollback to this state." Then trigger a new plan to reconcile.
+**Rollback**: Restore the previous state version from the backend (versioned bucket object, backend state history, or a pre-change backup), then run a fresh `terraform plan` to reconcile.
 ```
 
 ### Changelogs
@@ -316,9 +320,9 @@ Format:
 ### Environment Documentation
 Each environment (dev, staging, production, etc.) should have documentation covering:
 
-- **What the environment contains**: Which TFC workspaces are deployed, which services run there, what data it holds.
-- **Promotion Flow**: How changes move from one environment to the next — VCS branch strategy, TFC run triggers, manual promotion, approval gates.
-- **Access Requirements**: Who can access the environment, what TFC team membership is needed, what cloud-provider credentials are required, what approval is required.
+- **What the environment contains**: Which state units are deployed, which services run there, what data it holds.
+- **Promotion Flow**: How changes move from one environment to the next — VCS branch strategy, runner triggers, manual promotion, approval gates.
+- **Access Requirements**: Who can access the environment, what membership/permissions are needed, what cloud-provider credentials are required, what approval is required.
 - **Differences from Other Environments**: What is intentionally different — VM sizes, replica counts, feature flags, monitoring thresholds, network connectivity.
 - **Cost Profile**: Approximate cost, reserved capacity, spot/preemptible usage.
 
@@ -331,9 +335,9 @@ These rules apply to all documentation generated or reviewed under this skill:
 - Hand-maintain READMEs by default. Include resource tables, identity overviews, and RBAC mappings that automated tools cannot generate. Use terraform-docs only as an optional supplementary automation layer when adopted by the team.
 - Document required permissions, roles, or service account bindings needed to apply the Terraform configuration.
 - Document provider authentication requirements including service principals, managed identities, service accounts, and required environment variables.
-- Document state backend access requirements — TFC workspace access, Azure Blob Storage permissions, or GCS bucket permissions as applicable.
+- Document state backend access requirements — S3/GCS bucket permissions, azurerm container access, HCP Terraform workspace access, or other backend permissions as applicable.
 - Include example usage blocks showing real, valid HCL that can be copied and adapted. Do not use pseudo-code or incomplete examples.
-- When modules are sourced from the TFC private registry, document the full source path (`app.terraform.io/{org}/{module}/{provider}`) and the version constraint.
+- When modules are sourced from a registry, document the full source path and version constraint (e.g. `terraform-aws-modules/vpc/aws` for the public registry, `app.terraform.io/{org}/{module}/{provider}` for a private registry).
 
 ## Evidence Rules
 - All documentation must reflect the actual infrastructure code as it currently exists.
@@ -344,7 +348,7 @@ These rules apply to all documentation generated or reviewed under this skill:
 - Verify that documented resources match the actual resources in the module.
 - When documenting provider versions, check the actual `required_providers` block.
 - When documenting Terraform version requirements, check the actual `required_version` constraint.
-- When documenting TFC workspace configuration, verify workspace names, variable sets, and cross-workspace references against the actual TFC configuration or `tfe` provider resources.
+- When documenting backend/state configuration, verify state-unit names and cross-state references against the actual backend blocks and `terraform_remote_state` data sources. (For HCP Terraform workspace/variable-set verification, see the `hcp-terraform` skill.)
 
 ## Anti-Patterns To Reject
 - **Stale READMEs**: Documentation that describes a previous version of the module and has not been updated to reflect current resources, variables, or outputs.
@@ -357,7 +361,7 @@ These rules apply to all documentation generated or reviewed under this skill:
 - **Copy-Pasted Provider Docs**: Restating upstream provider documentation instead of explaining how the module uses the resource.
 - **Missing Authentication Docs**: Assuming operators know how to authenticate without documenting the specific requirements.
 - **Missing Identity and RBAC Documentation**: Modules that create managed identities, service principals, or role assignments without documenting who gets what access and to which scope.
-- **Missing TFC Workspace Context**: Root module documentation that does not mention which TFC workspace manages it, how variables are supplied, or how cross-workspace dependencies work.
+- **Missing State Context**: Root module documentation that does not mention which state unit manages it, how variables are supplied, or how cross-state dependencies work.
 - **Over-reliance on terraform-docs**: Using terraform-docs as the sole documentation source when the module requires resource tables, identity overviews, or RBAC mappings that terraform-docs cannot generate.
 
 ## Quality Checklist
@@ -369,12 +373,12 @@ Before considering a Terraform documentation task complete, verify:
 - The resources listed in the README match the actual resources in the module.
 - Provider and Terraform version requirements documented match the actual constraints.
 - Runbook procedures include failure handling, not just the happy path.
-- Runbook procedures reflect TFC workflows (plan in UI, apply with approval, state operations via TFC) when TFC is the backend.
+- Runbook procedures reflect the actual workflow (CLI saved-plan apply, runner approval, backend state operations); TFC-UI specifics belong in the `hcp-terraform` skill when TFC is the backend.
 - ADRs include consequences, not just the decision.
 - Changelog entries distinguish breaking changes from non-breaking changes.
 - No sensitive values (subscription IDs, secrets, internal hostnames) appear in example blocks unless they are clearly fake.
 - AGENTS.md files accurately reflect the repository's actual conventions and tooling.
-- TFC workspace documentation covers naming, cross-workspace references, and variable configuration.
+- State-backend documentation covers naming, cross-state references, and variable configuration.
 - If terraform-docs is in use, its output is consistent with the hand-maintained sections. If terraform-docs is not in use, hand-maintained tables are current.
 
 ## Invocation Template
@@ -384,5 +388,5 @@ Use this skill with a prompt that supplies repository-specific context. Example:
 Use Terraform Documentation Guidance.
 Generate a README for the network module at /path/to/modules/network.
 Include usage example, resource table, inputs table, outputs table, identity overview, and required permissions.
-Document the TFC workspace configuration and cross-workspace dependencies.
+Document the backend/state configuration and cross-state dependencies.
 ```
