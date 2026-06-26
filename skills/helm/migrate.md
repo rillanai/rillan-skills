@@ -10,6 +10,8 @@ Use this skill when planning Helm chart migrations: chart API changes, values co
 ## Knowledge-Graph Discovery (When Available)
 If a graphify knowledge graph (`graphify-out/`) is present, use `graphify query`/`graphify path` to enumerate affected sites and latent cross-module couplings before sequencing the migration — graph traversal surfaces indirect dependencies that text search misses. Confirm every graph-derived call site or dependency with structural tooling, and run `graphify update .` after each step so the map tracks the migration.
 
+If no `graphify-out/` directory exists, ignore this section.
+
 ## Tool Use
 This skill is tool-agnostic and works with Claude Code, Codex, OpenCode, and similar assistants. Map its guidance to whatever file-reading, editing, search, and shell-execution tools your environment exposes.
 
