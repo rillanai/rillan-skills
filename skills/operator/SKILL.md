@@ -1,6 +1,6 @@
 ---
 name: operator
-description: Kubernetes operators in Go (kubebuilder, controller-runtime, achilles-sdk) — reconcilers, CRD/API types, webhooks, finalizers, status/conditions, watch wiring, manager setup; plus operator testing (envtest, fake-client), docs, deep audits, and CRD/controller-runtime migrations. Triggers on `api/*/*_types.go`, controllers, or `sigs.k8s.io/controller-runtime`. Root skill that routes to its mode files.
+description: Kubernetes operators in Go (kubebuilder, controller-runtime, achilles-sdk) — reconcilers, CRD/API types, admission control (ValidatingAdmissionPolicy/VAP and webhooks), finalizers, status/conditions, watch wiring, manager setup; plus operator testing (envtest, fake-client), docs, deep audits, and CRD/controller-runtime migrations. Triggers on `api/*/*_types.go`, controllers, or `sigs.k8s.io/controller-runtime`. Root skill that routes to its mode files.
 ---
 
 <!-- SPDX-FileCopyrightText: 2026 Rillan AI LLC -->
@@ -19,11 +19,14 @@ baseline; the mode files below add controller-specific rules. When operator guid
 conflicts with generic Go guidance, follow the operator file for controller concerns.
 
 ## Modes — load the one matching the task
-- `dev.md` — API types, reconcilers, watch wiring, finalizers, status/conditions, webhooks, manager setup.
-- `test.md` — reconciler unit tests, envtest, fake-client, webhook validation/defaulting, CRD generation checks.
-- `audit.md` — explicit, phased, evidence-based audit of reconciler correctness, CRD/webhook/status models, lifecycle safety.
+- `dev.md` — API types, reconcilers, watch wiring, finalizers, status/conditions, admission control (prefer VAP over validating webhooks), manager setup.
+- `test.md` — reconciler unit tests, envtest, fake-client, admission-policy/webhook validation/defaulting, CRD generation checks.
+- `audit.md` — explicit, phased, evidence-based audit of reconciler correctness, CRD/admission-control/status models, lifecycle safety.
 - `docs.md` — CRDs/API contracts, reconciliation semantics, ownership, status/conditions, install/upgrade/rollback guides.
 - `migrate.md` — CRD version flips, storage-version changes, conversion webhooks, controller-runtime upgrades, achilles-sdk adoption.
 
 Centered on kubebuilder, controller-runtime, and achilles-sdk; `operator-sdk` is not the
 primary workflow — preserve existing conventions if a repo already uses it.
+
+Image/bundle/manifest packaging (distroless, multi-arch, SBOM, OLM bundle, kustomize/PROJECT-v4
+layout) is covered by the `docker`, `cicd`, and `kubernetes` skills, not duplicated here.

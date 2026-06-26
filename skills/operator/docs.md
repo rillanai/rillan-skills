@@ -1,7 +1,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Rillan AI LLC -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-<!-- version: 3.0.0 -->
+<!-- version: 3.1.0 -->
 # Kubernetes Operator Documentation Guidance
 
 ## Purpose
@@ -27,3 +27,9 @@ This skill is tool-agnostic and works with Claude Code, Codex, OpenCode, and sim
 - Explain what the controller owns, what it watches, and what side effects it produces.
 - Keep examples grounded in actual CRD fields and real reconciliation behavior.
 - Treat generated CRDs and manifests as artifacts to explain, not as the only source of documentation.
+- Generate the CRD/API reference from source markers (`crd-ref-docs` or `gen-crd-api-reference-docs`) rather than hand-writing field tables — generated reference stays in sync with `*_types.go` and CRD bases. Hand-write only the prose around it.
+- Document the **metrics surface**: which custom collectors the controller exposes, the authenticated endpoint (no kube-rbac-proxy), and the RBAC a scraper needs.
+- Provide a **conditions reference table**: each condition `type`, its `reason` values, what `True`/`False`/`Unknown` mean, and how `observedGeneration` signals freshness.
+- Document **RBAC**: the ClusterRole/Role the controller needs and why, derived from `+kubebuilder:rbac` markers.
+
+> Image/bundle/manifest packaging (distroless base, multi-arch, SBOM, OLM bundle, kustomize/PROJECT-v4 layout) is covered by the `docker`, `cicd`, and `kubernetes` skills — document it there, not here.
