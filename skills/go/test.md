@@ -1,7 +1,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Rillan AI LLC -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-<!-- version: 3.0.0 -->
+<!-- version: 3.1.0 -->
 # Go Test Mode
 
 ## Purpose
@@ -74,11 +74,19 @@ Use sparingly for:
 - deploy-time or contract confirmation
 
 ### Fuzz Tests
-Use for:
-- parsers
-- validators
-- serializers
-- untrusted input processing
+Use native Go fuzzing (`func FuzzXxx(f *testing.F)`, `go test -fuzz`) for:
+- parsers, decoders, and deserializers
+- validators and sanitizers
+- anything that handles untrusted or attacker-controlled input
+- round-trip invariants (encode→decode, marshal→unmarshal) and any function with a property that must hold for all inputs
+
+Rules:
+- Seed the corpus with `f.Add(...)` using known-tricky inputs and any past crash reproducers.
+- Assert a property inside `f.Fuzz`, not a fixed output — round-trip equality, "must not panic", invariant preservation. A fuzz target with no property is just a slow no-op.
+- The seed corpus runs as ordinary unit tests under a plain `go test` (no `-fuzz`); active mutation only happens with `-fuzz=FuzzXxx`. This means seed cases give regression value on every run for free.
+- When the fuzzer finds a failure it writes the input to `testdata/fuzz/FuzzXxx/`. Commit that file — it becomes a permanent regression case replayed by `go test`.
+- Active fuzzing is time-boxed, not run-to-completion: drive it with `-fuzztime` (e.g. `-fuzztime=60s` locally, longer on a schedule in CI). See `ci.md` for the CI shape (seed corpus on every PR, time-boxed `-fuzz` on a schedule).
+- `-fuzz` matches one target at a time and cannot be combined with multiple packages; run targeted: `go test -run=^$ -fuzz=FuzzXxx -fuzztime=60s ./path/to/pkg`.
 
 ### Benchmark Tests
 Use for:
@@ -107,13 +115,26 @@ Prefer standard `testing` when:
 - Use `t.Run` for named cases and selective execution.
 - Use `t.Helper()` in helpers.
 - Use `t.Cleanup` for teardown tied to test lifecycle.
-- Use `t.Parallel()` only when shared state and external resources make it safe.
+- Default to `t.Parallel()`. Call it in every test and subtest unless something concrete makes it unsafe — shared mutable global state, an external resource that can't be concurrently used, or order dependence. Parallelism is the goal; serial is the exception you justify, not the reverse. See `Test Speed And Parallelism` below for the correctness rules that make this safe.
 - Prefer fakes and stubs over heavy mock frameworks unless call sequencing is the real behavior under test.
 - Do not mock types you do not own; wrap them behind your own interface first when necessary.
+
+## Test Speed And Parallelism
+Fast tests are a quality feature: they get run more often, shorten the feedback loop, and keep CI cheap. Treat suite wall-clock time as a number worth defending — but never by deleting coverage or skipping the race detector. Speed comes from parallelism and avoided work, not from testing less.
+
+- **Parallelize by default.** A package whose tests all call `t.Parallel()` runs its cases concurrently up to `GOMAXPROCS` (override with `-parallel=N`). Across packages, `go test ./...` already runs distinct packages concurrently (`-p=N`, defaults to `GOMAXPROCS`) — so the biggest single lever is making the slow packages internally parallel.
+- **Capture the loop variable correctly.** In table-driven parallel subtests, ensure each `t.Run` closure binds its own case. On Go 1.22+ the per-iteration loop variable makes this safe; on older toolchains add `tc := tc` before `t.Run`. A parallel subtest that closes over a shared loop variable tests the wrong case.
+- **`t.Setenv` and `t.Parallel()` are mutually exclusive** — `t.Setenv` panics in a parallel test (env is process-global). A test that needs an env var either stays serial or is refactored to inject configuration instead of reading the environment.
+- **Make parallel-safe the default design, not an afterthought.** Per-test temp dirs (`t.TempDir()`), unique resource names, no shared package-level mutable vars, no reliance on execution order. Code written this way is parallelizable for free.
+- **Run with `-shuffle=on`** in CI and locally. Order-dependent tests are a latent bug; shuffling surfaces them before parallelism does in production.
+- **Avoid redundant work.** Use `-count=1` to defeat the cache only when you specifically need a fresh run (the test cache is a speed feature — keep it). Scope expensive suites behind build tags (`-tags integration`) or `testing.Short()` so the fast inner loop stays fast: guard slow cases with `if testing.Short() { t.Skip() }` and run `-short` on the quick tier.
+- **Find the long pole.** `go test -v` with timing, or `gotestsum`, shows the slowest tests. Optimizing the slowest 5% of tests usually buys more than micro-tuning the rest.
+- **Keep `-race` on despite its cost.** The race detector slows tests ~2–10×, but it catches a bug class nothing else does. Buy the time back with parallelism, sharding, and caching — not by dropping `-race`.
 
 ## Concurrency And Lifecycle Testing
 - Run concurrent or shared-state tests with the race detector.
 - Use explicit synchronization, not `time.Sleep`, for correctness.
+- Prefer `testing/synctest` (GA in Go 1.25) for deterministically testing timeouts, tickers, context deadlines, and goroutine coordination: run the bubble with `synctest.Test`, advance the fake clock, and use `synctest.Wait` to block until every goroutine in the bubble is durably idle. This replaces real-time sleeps and the flakiness they cause.
 - Test cancellation, timeout, shutdown, and drain behavior when code depends on them.
 - Verify goroutine ownership and completion in lifecycle-sensitive code.
 
@@ -127,7 +148,10 @@ Prefer standard `testing` when:
 When the repository does not define a stricter workflow, prefer:
 - `go test ./...`
 - `go test -race ./...` for concurrency or lifecycle-sensitive changes
+- `go test -shuffle=on ./...` to flush out order-dependent tests
 - `go test -coverprofile=coverage.out ./...` when coverage evidence is needed
+- `go test -run=^$ -fuzz=FuzzXxx -fuzztime=60s ./path/to/pkg` to actively fuzz one target (a plain `go test` already replays its seed corpus)
+- `go test -short ./...` to run the fast tier, skipping cases guarded by `testing.Short()`
 - `ginkgo run -r --race --cover` when Ginkgo is the primary repository workflow
 
 ## Anti-Patterns To Reject
@@ -137,6 +161,12 @@ When the repository does not define a stricter workflow, prefer:
 - no regression coverage after bug fixes
 - golden files updated without reviewing the diff
 - treating high line coverage as proof of meaningful test quality
+- serial-by-default tests with no reason for not calling `t.Parallel()`
+- `t.Setenv` inside a parallel test (it panics; inject config instead)
+- parallel subtests that close over a shared loop variable on pre-1.22 toolchains
+- a fuzz target that asserts nothing (no property, no panic check) — it burns CPU for no signal
+- discovered fuzz crashers left out of `testdata/fuzz/` so the regression isn't replayed
+- buying suite speed by dropping `-race` instead of by parallelizing/sharding
 
 ## Invocation Template
 Use this skill with a prompt that supplies repository-specific context. Example:

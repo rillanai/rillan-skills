@@ -1,7 +1,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Rillan AI LLC -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-<!-- version: 3.0.0 -->
+<!-- version: 3.1.0 -->
 # Go Documentation Mode
 
 ## Purpose
@@ -57,7 +57,15 @@ Do not use this skill for:
 - Every exported function, type, method, constant, or variable should have a doc comment when the package exposes it as API.
 - Start the first sentence with the symbol name.
 - Document invariants, zero-value behavior, side effects, concurrency safety, and notable error conditions when relevant.
+- Mark deprecated API with a `// Deprecated:` paragraph (tooling and `gopls` recognize it); name the replacement.
 - Do not add noise comments that restate the obvious.
+
+### Testable Examples
+- Add `func ExampleXxx` (and `ExampleType_Method`) examples for the primary usage paths; they compile and run under `go test` and render in the API docs.
+- Use an `// Output:` comment so the example is verified, not just compiled.
+
+### Local API Preview
+- Preview rendered package docs locally with `pkgsite` (`go run golang.org/x/pkgsite/cmd/pkgsite`) or read them inline with `go doc <pkg>`. The legacy `godoc` binary is retired; do not reference it.
 
 ### README Files
 A Go project README should usually include:
@@ -73,7 +81,7 @@ A Go project README should usually include:
 10. license
 
 Rules:
-- do not duplicate godoc in the README
+- do not duplicate API doc comments in the README; link to the rendered package docs instead
 - keep quickstart short and executable
 - update the README when build, config, or project structure changes
 
