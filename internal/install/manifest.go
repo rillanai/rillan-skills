@@ -5,6 +5,7 @@ package install
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -58,8 +59,13 @@ func LoadManifest(root string) (*Manifest, error) {
 	if err := json.Unmarshal(b, &m); err != nil {
 		return nil, err
 	}
+	// schema 0 means "written before the field existed" — treat as current.
+	// Any other unrecognized value is incompatible: refuse rather than risk an
+	// older binary misreading a newer manifest's layout.
 	if m.Schema == 0 {
 		m.Schema = manifestSchema
+	} else if m.Schema != manifestSchema {
+		return nil, fmt.Errorf("manifest at %s has unsupported schema %d (this binary supports %d); upgrade rillan-skills", ManifestPath(root), m.Schema, manifestSchema)
 	}
 	return &m, nil
 }

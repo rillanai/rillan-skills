@@ -7,7 +7,25 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
+
+// safeJoin resolves a manifest-recorded (slash-relative) path against root and
+// returns it only if it stays inside root. Absolute paths and ".." escapes are
+// rejected so a tampered manifest cannot delete files outside the scope root.
+func safeJoin(root, rel string) (string, bool) {
+	relOS := filepath.FromSlash(rel)
+	if relOS == "" || filepath.IsAbs(relOS) {
+		return "", false
+	}
+	rootClean := filepath.Clean(root)
+	p := filepath.Clean(filepath.Join(rootClean, relOS))
+	inside, err := filepath.Rel(rootClean, p)
+	if err != nil || inside == ".." || strings.HasPrefix(inside, ".."+string(os.PathSeparator)) {
+		return "", false
+	}
+	return p, true
+}
 
 // UninstallOptions control an uninstall run.
 type UninstallOptions struct {
@@ -39,6 +57,9 @@ func Uninstall(opts UninstallOptions) (int, error) {
 			opts.Home = h
 		}
 	} else {
+		if opts.Target == "" {
+			return 0, fmt.Errorf("uninstall: target directory is required")
+		}
 		abs, err := filepath.Abs(opts.Target)
 		if err != nil {
 			return 0, err
@@ -83,7 +104,14 @@ func Uninstall(opts UninstallOptions) (int, error) {
 				files := man.Entries[idx].Files
 				didRemove := false
 				for _, rel := range files {
-					p := filepath.Join(root, filepath.FromSlash(rel))
+					// The manifest is repo/user-writable, so never trust a
+					// recorded path: only remove paths that resolve inside the
+					// scope root (no absolute paths, no ".." escapes).
+					p, ok := safeJoin(root, rel)
+					if !ok {
+						opts.Logger("[!] %s/%s: refusing to remove out-of-scope path %q", t, pack, rel)
+						continue
+					}
 					if removePath(p, opts) {
 						didRemove = true
 					}

@@ -198,6 +198,10 @@ func Run(efs fs.FS, opts Options) (int, error) {
 				opts.Logger("[=] %s/%s: up-to-date (v%s)", t, p.Name, p.Version)
 				continue
 			}
+			if !opts.Force && kind == changeDown {
+				opts.Logger("[!] %s/%s: installed v%s is newer than bundled v%s — skipping (use --force to downgrade)", t, p.Name, recorded, p.Version)
+				continue
+			}
 			if opts.DryRun {
 				opts.Logger("[dry-run] %s/%s %s -> %s", t, p.Name, changeVerb(kind, recorded, p.Version), marker)
 				count++

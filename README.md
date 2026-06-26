@@ -109,9 +109,10 @@ rillan-skills install --target . --tool claude --force
 ### Install skills globally (user-level, all tools)
 
 Use `--global` to install into each tool's **user-level** config directory instead
-of a repository, so the skills are available across every project. `--global`
-installs **all** bundled packs (detection is meaningless against your home dir) and
-composes with `--tool`; pass `--tool all` to install for every supported tool at once:
+of a repository, so the skills are available across every project. By default
+`--global` installs **all** bundled packs (detection is meaningless against your home
+dir); it composes with `--tool` and you can still pass `--packs go,security` to narrow
+the selection. Pass `--tool all` to install for every supported tool at once:
 
 ```bash
 # Install all packs globally for Claude Code only
@@ -119,6 +120,9 @@ rillan-skills install --global --tool claude
 
 # Install all packs globally for every supported tool
 rillan-skills install --global --tool all
+
+# Install only a subset globally (--packs still narrows under --global)
+rillan-skills install --global --tool all --packs go,security
 
 # Preview a global install without writing
 rillan-skills install --global --tool all --dry-run
@@ -152,9 +156,15 @@ The manifest records, per installed pack, the `tool`, `pack`, installed `version
 and the list of `files` written (relative to the scope root). On (re)install the
 bundled pack version (`<!-- version: X.Y.Z -->`) is compared against the manifest
 (falling back to the installed router's marker), and each pack is reported as
-`installed` / `upgraded X.Y.Z->A.B.C` / `up-to-date` / `reinstalled`. `uninstall`
-removes only the files the manifest recorded, so it never deletes unrelated skills
-sharing a directory.
+`installed` / `upgraded X.Y.Z->A.B.C` / `up-to-date` / `reinstalled` /
+`downgraded A.B.C->X.Y.Z`. A downgrade (installed version newer than bundled) is
+**skipped by default** — pass `--force` to overwrite it.
+
+`uninstall` removes only the files the manifest recorded — and only those that
+resolve inside the scope root — so it never deletes unrelated skills sharing a
+directory. For installs that predate the manifest (no recorded entry for a tool),
+`uninstall` falls back to removing the known pack paths (`<base>/<pack>/` or
+`<base>/<pack>.md`) that exist on disk.
 
 ### Other commands
 

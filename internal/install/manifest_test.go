@@ -235,3 +235,115 @@ func TestUninstallGlobal(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadManifestRejectsUnknownSchema(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Dir(ManifestPath(root)), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ManifestPath(root), []byte(`{"schema":99,"entries":[]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadManifest(root); err == nil {
+		t.Fatal("want error for unsupported schema, got nil")
+	}
+}
+
+func TestInstallDowngradeSkippedWithoutForce(t *testing.T) {
+	dir := t.TempDir()
+	opts := Options{Target: dir, Tools: []Tool{ToolClaude}, Packs: []string{"go"}}
+
+	// Install a newer version first.
+	if _, err := Run(versionedFixture("3.5.0"), opts); err != nil {
+		t.Fatalf("install newer: %v", err)
+	}
+	// A bundle with an older version must be skipped by default.
+	var logs []string
+	down := opts
+	down.Logger = func(format string, a ...any) { logs = append(logs, fmtLine(format, a...)) }
+	n, err := Run(versionedFixture("3.0.0"), down)
+	if err != nil {
+		t.Fatalf("downgrade run: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("downgrade without --force: want 0 written, got %d", n)
+	}
+	var warned bool
+	for _, l := range logs {
+		if strings.Contains(l, "newer than bundled") {
+			warned = true
+		}
+	}
+	if !warned {
+		t.Errorf("want a downgrade-skip warning, got %v", logs)
+	}
+	if v := mustManifest(t, dir).Recorded("claude", "go"); v != "3.5.0" {
+		t.Errorf("manifest must stay at 3.5.0, got %q", v)
+	}
+
+	// With --force the downgrade is applied.
+	forced := opts
+	forced.Force = true
+	if n, err := Run(versionedFixture("3.0.0"), forced); err != nil || n != 1 {
+		t.Fatalf("forced downgrade: n=%d err=%v want 1", n, err)
+	}
+	if v := mustManifest(t, dir).Recorded("claude", "go"); v != "3.0.0" {
+		t.Errorf("manifest after forced downgrade: want 3.0.0, got %q", v)
+	}
+}
+
+func TestUninstallEmptyTargetErrors(t *testing.T) {
+	if _, err := Uninstall(UninstallOptions{Target: "", Tools: []Tool{ToolClaude}}); err == nil {
+		t.Fatal("want error for empty target in project mode, got nil")
+	}
+}
+
+func TestUninstallRejectsOutOfScopePaths(t *testing.T) {
+	root := t.TempDir()
+	// A sentinel file outside the scope root that a tampered manifest tries to
+	// delete via traversal must survive.
+	outside := filepath.Join(filepath.Dir(root), "victim-"+filepath.Base(root)+".txt")
+	if err := os.WriteFile(outside, []byte("do not delete"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Remove(outside) }()
+
+	// Hand-craft a manifest with malicious file entries.
+	m := &Manifest{}
+	m.upsert(Entry{Tool: "claude", Pack: "go", Files: []string{
+		"../" + filepath.Base(outside), // relative traversal escape
+		outside,                        // absolute path
+	}})
+	if err := m.Save(root); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	var logs []string
+	if _, err := Uninstall(UninstallOptions{
+		Target: root, Tools: []Tool{ToolClaude}, KnownPacks: []string{"go"},
+		Logger: func(format string, a ...any) { logs = append(logs, fmtLine(format, a...)) },
+	}); err != nil {
+		t.Fatalf("Uninstall: %v", err)
+	}
+	if _, err := os.Stat(outside); err != nil {
+		t.Errorf("out-of-scope file must be preserved: %v", err)
+	}
+	var refused bool
+	for _, l := range logs {
+		if strings.Contains(l, "out-of-scope") {
+			refused = true
+		}
+	}
+	if !refused {
+		t.Errorf("want an out-of-scope refusal log, got %v", logs)
+	}
+}
+
+func mustManifest(t *testing.T, root string) *Manifest {
+	t.Helper()
+	m, err := LoadManifest(root)
+	if err != nil {
+		t.Fatalf("LoadManifest: %v", err)
+	}
+	return m
+}

@@ -156,7 +156,8 @@ func resolvePacks(c *commonFlags) ([]string, map[string]string, error) {
 		return packs, reasons, nil
 	}
 	// Global install targets the user's home, not a repo, so detection would be
-	// meaningless — install every bundled pack instead.
+	// meaningless. With no explicit --packs, default to every bundled pack;
+	// an explicit --packs (handled above) still narrows the selection.
 	if c.global {
 		packs := rillanskills.Packs()
 		reasons := map[string]string{}
