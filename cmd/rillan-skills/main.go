@@ -40,13 +40,16 @@ Commands:
 Common flags:
   --target string   Target repository directory (default ".")
   --packs string    Comma-separated pack list, overrides detection (e.g. "go,kubernetes")
-  --tool string     Comma-separated tool list: claude,codex,opencode (default "claude")
+  --tool string     Comma-separated tool list: claude,codex,opencode,grok or "all" (default "claude")
+  --global          Install into each tool's user-level config dir instead of a repo
   --dry-run         Show what would happen without writing files
   --force           Overwrite installed files even when versions match
 
 Examples:
   rillan-skills install --target . --tool claude
   rillan-skills install --packs go,security --dry-run
+  rillan-skills install --global --tool claude
+  rillan-skills install --global --tool all --dry-run
   rillan-skills detect --target ../some-repo
 `
 
@@ -89,6 +92,7 @@ type commonFlags struct {
 	tools  string
 	dryRun bool
 	force  bool
+	global bool
 }
 
 func parseCommon(name string, args []string) (*commonFlags, []string, error) {
@@ -96,9 +100,10 @@ func parseCommon(name string, args []string) (*commonFlags, []string, error) {
 	c := &commonFlags{}
 	fs.StringVar(&c.target, "target", ".", "Target repository directory")
 	fs.StringVar(&c.packs, "packs", "", "Comma-separated pack list (overrides detection)")
-	fs.StringVar(&c.tools, "tool", "claude", "Comma-separated tool list: claude,codex,opencode")
+	fs.StringVar(&c.tools, "tool", "claude", "Comma-separated tool list: claude,codex,opencode,grok or \"all\"")
 	fs.BoolVar(&c.dryRun, "dry-run", false, "Show what would happen without writing files")
 	fs.BoolVar(&c.force, "force", false, "Overwrite installed files even when versions match")
+	fs.BoolVar(&c.global, "global", false, "Install into each tool's user-level config dir instead of a repo")
 	if err := fs.Parse(args); err != nil {
 		return nil, nil, err
 	}
@@ -117,11 +122,14 @@ func resolveTools(s string) ([]install.Tool, error) {
 		if t == "" {
 			continue
 		}
+		if t == "all" {
+			return install.AllTools(), nil
+		}
 		switch install.Tool(t) {
-		case install.ToolClaude, install.ToolCodex, install.ToolOpenCode:
+		case install.ToolClaude, install.ToolCodex, install.ToolOpenCode, install.ToolGrok:
 			out = append(out, install.Tool(t))
 		default:
-			return nil, fmt.Errorf("unknown tool %q (valid: claude, codex, opencode)", t)
+			return nil, fmt.Errorf("unknown tool %q (valid: claude, codex, opencode, grok, all)", t)
 		}
 	}
 	if len(out) == 0 {
@@ -144,6 +152,17 @@ func resolvePacks(c *commonFlags) ([]string, map[string]string, error) {
 			}
 			packs = append(packs, p)
 			reasons[p] = "explicit --packs"
+		}
+		return packs, reasons, nil
+	}
+	// Global install targets the user's home, not a repo, so detection would be
+	// meaningless. With no explicit --packs, default to every bundled pack;
+	// an explicit --packs (handled above) still narrows the selection.
+	if c.global {
+		packs := rillanskills.Packs()
+		reasons := map[string]string{}
+		for _, p := range packs {
+			reasons[p] = "global install (all packs)"
 		}
 		return packs, reasons, nil
 	}
@@ -178,6 +197,7 @@ func runInstall(args []string) error {
 		Packs:  packs,
 		DryRun: c.dryRun,
 		Force:  c.force,
+		Global: c.global,
 		Logger: func(format string, a ...any) { fmt.Printf(format+"\n", a...) },
 	})
 	if err != nil {
@@ -187,7 +207,11 @@ func runInstall(args []string) error {
 	if c.dryRun {
 		verb = "would install"
 	}
-	fmt.Printf("\nrillan-skills: %s %d skill pack(s) into %s\n", verb, count, c.target)
+	dest := c.target
+	if c.global {
+		dest = "user-level config directories"
+	}
+	fmt.Printf("\nrillan-skills: %s %d skill pack(s) into %s\n", verb, count, dest)
 	return nil
 }
 
@@ -246,49 +270,23 @@ func runUninstall(args []string) error {
 	if err != nil {
 		return err
 	}
-	removed := 0
-	for _, t := range tools {
-		root := uninstallRoot(t, c.target)
-		entries, err := os.ReadDir(root)
-		if err != nil {
-			if !os.IsNotExist(err) {
-				return err
-			}
-			continue
-		}
-		for _, e := range entries {
-			path := filepath.Join(root, e.Name())
-			if c.dryRun {
-				fmt.Printf("[dry-run] would remove %s\n", path)
-				removed++
-				continue
-			}
-			if err := os.RemoveAll(path); err != nil {
-				return err
-			}
-			fmt.Printf("[-] removed %s\n", path)
-			removed++
-		}
+	removed, err := install.Uninstall(install.UninstallOptions{
+		Target:     c.target,
+		Tools:      tools,
+		Global:     c.global,
+		DryRun:     c.dryRun,
+		KnownPacks: rillanskills.Packs(),
+		Logger:     func(format string, a ...any) { fmt.Printf(format+"\n", a...) },
+	})
+	if err != nil {
+		return err
 	}
 	verb := "removed"
 	if c.dryRun {
 		verb = "would remove"
 	}
-	fmt.Printf("\nrillan-skills: %s %d skill entries\n", verb, removed)
+	fmt.Printf("\nrillan-skills: %s %d skill pack(s)\n", verb, removed)
 	return nil
-}
-
-func uninstallRoot(t install.Tool, target string) string {
-	switch t {
-	case install.ToolClaude:
-		return filepath.Join(target, ".claude", "skills")
-	case install.ToolCodex:
-		return filepath.Join(target, ".codex", "skills")
-	case install.ToolOpenCode:
-		return filepath.Join(target, ".opencode", "agents")
-	default:
-		return filepath.Join(target, ".claude", "skills")
-	}
 }
 
 func printPackList(packs []string, reasons map[string]string) {

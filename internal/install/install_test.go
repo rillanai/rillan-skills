@@ -4,6 +4,7 @@
 package install
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -67,10 +68,151 @@ func TestRouterDest(t *testing.T) {
 		ToolOpenCode: filepath.FromSlash("/repo/.opencode/agents/go.md"),
 	}
 	for tool, want := range cases {
-		if got := routerDest(tool, tgt, "go"); got != want {
+		base, ok := SkillsDir(tool, tgt, "", false)
+		if !ok {
+			t.Fatalf("%s: SkillsDir returned not-ok", tool)
+		}
+		if got := routerDest(tool, base, "go"); got != want {
 			t.Errorf("%s: got %q want %q", tool, got, want)
 		}
 	}
+}
+
+func TestSkillsDirProject(t *testing.T) {
+	tgt := filepath.FromSlash("/repo")
+	cases := map[Tool]string{
+		ToolClaude:   filepath.FromSlash("/repo/.claude/skills"),
+		ToolCodex:    filepath.FromSlash("/repo/.codex/skills"),
+		ToolOpenCode: filepath.FromSlash("/repo/.opencode/agents"),
+	}
+	for tool, want := range cases {
+		got, ok := SkillsDir(tool, tgt, "", false)
+		if !ok || got != want {
+			t.Errorf("%s: got %q ok=%v, want %q", tool, got, ok, want)
+		}
+	}
+}
+
+func TestSkillsDirGlobal(t *testing.T) {
+	home := filepath.FromSlash("/home/u")
+	cases := map[Tool]string{
+		ToolClaude:   filepath.FromSlash("/home/u/.claude/skills"),
+		ToolCodex:    filepath.FromSlash("/home/u/.codex/skills"),
+		ToolOpenCode: filepath.FromSlash("/home/u/.config/opencode/agent"),
+	}
+	for tool, want := range cases {
+		got, ok := SkillsDir(tool, "", home, true)
+		if !ok || got != want {
+			t.Errorf("%s: got %q ok=%v, want %q", tool, got, ok, want)
+		}
+	}
+}
+
+func TestSkillsDirUnsupportedTool(t *testing.T) {
+	for _, global := range []bool{false, true} {
+		if got, ok := SkillsDir(ToolGrok, "/repo", "/home/u", global); ok {
+			t.Errorf("grok (global=%v): want unsupported, got %q ok=%v", global, got, ok)
+		}
+		if got, ok := SkillsDir(Tool("nope"), "/repo", "/home/u", global); ok {
+			t.Errorf("unknown tool (global=%v): want unsupported, got %q ok=%v", global, got, ok)
+		}
+	}
+	if hint := ManualHint(ToolGrok); hint == "" {
+		t.Error("ManualHint(grok): want non-empty guidance")
+	}
+	if hint := ManualHint(ToolClaude); hint != "" {
+		t.Errorf("ManualHint(claude): want empty, got %q", hint)
+	}
+}
+
+func TestRunGlobalWritesUnderHome(t *testing.T) {
+	home := t.TempDir()
+	n, err := Run(fixture(), Options{
+		Global: true, Home: home,
+		Tools: []Tool{ToolClaude, ToolCodex, ToolOpenCode},
+		Packs: []string{"go", "security"},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	// 2 packs x 3 tools.
+	if n != 6 {
+		t.Errorf("want 6 packs written, got %d", n)
+	}
+	for _, rel := range []string{
+		".claude/skills/go/SKILL.md",
+		".claude/skills/go/policy.md",
+		".codex/skills/security/SKILL.md",
+		".config/opencode/agent/go.md",
+	} {
+		if _, err := os.Stat(filepath.Join(home, filepath.FromSlash(rel))); err != nil {
+			t.Errorf("missing %s: %v", rel, err)
+		}
+	}
+}
+
+func TestRunGlobalSkipsUnsupportedTool(t *testing.T) {
+	home := t.TempDir()
+	var logs []string
+	n, err := Run(fixture(), Options{
+		Global: true, Home: home,
+		Tools:  []Tool{ToolGrok},
+		Packs:  []string{"go"},
+		Logger: func(format string, _ ...any) { logs = append(logs, format) },
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("grok: want 0 written (skipped), got %d", n)
+	}
+	// Nothing should have been written under home.
+	if entries, _ := os.ReadDir(home); len(entries) != 0 {
+		t.Errorf("grok: want empty home, got %d entries", len(entries))
+	}
+	var warned bool
+	for _, l := range logs {
+		if strings.Contains(l, "skipped") {
+			warned = true
+		}
+	}
+	if !warned {
+		t.Error("grok: want a skip warning logged")
+	}
+}
+
+func TestRunGlobalDryRun(t *testing.T) {
+	home := t.TempDir()
+	var logs []string
+	n, err := Run(fixture(), Options{
+		Global: true, Home: home, DryRun: true,
+		Tools:  []Tool{ToolClaude},
+		Packs:  []string{"go"},
+		Logger: func(format string, a ...any) { logs = append(logs, fmtLine(format, a...)) },
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("want 1 pack in dry-run count, got %d", n)
+	}
+	// Dry-run must not write anything.
+	if _, err := os.Stat(filepath.Join(home, ".claude")); !os.IsNotExist(err) {
+		t.Errorf("dry-run wrote files: %v", err)
+	}
+	var sawTarget bool
+	for _, l := range logs {
+		if strings.Contains(l, "dry-run") && strings.Contains(l, filepath.FromSlash(".claude/skills/go/SKILL.md")) {
+			sawTarget = true
+		}
+	}
+	if !sawTarget {
+		t.Errorf("dry-run: want a log line naming the global target, got %v", logs)
+	}
+}
+
+func fmtLine(format string, a ...any) string {
+	return fmt.Sprintf(format, a...)
 }
 
 func TestRunClaudeWritesTree(t *testing.T) {

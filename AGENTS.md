@@ -24,6 +24,20 @@ For a one-off dry-run install against a sample target:
 ./bin/rillan-skills install --target /path/to/repo --tool claude --dry-run
 ```
 
+The installer also supports a user-level **global** mode (`--global`) that writes into
+each tool's home config directory instead of a repo (`~/.claude/skills/`,
+`~/.codex/skills/`, `~/.config/opencode/agent/`; Grok is recognized but skipped with a
+manual-copy hint). `--global` installs all bundled packs and composes with `--tool` /
+`--tool all`. Every install (per-repo or global) records what it wrote to an install
+manifest (`<target>/.rillan-skills/manifest.json`, or `~/.rillan-skills/manifest.json`
+for `--global`); the manifest drives upgrade-vs-skip decisions and lets `uninstall`
+remove exactly the recorded files. Exercise both:
+
+```bash
+./bin/rillan-skills install --global --tool all --dry-run
+./bin/rillan-skills uninstall --global --tool all --dry-run
+```
+
 ## Coding Style & Naming Conventions
 
 Keep Markdown direct and tool-oriented. Use short sections, imperative guidance, and fenced examples only where they add value. Each pack's router is `skills/<pack>/SKILL.md` (with YAML frontmatter); mode files are `skills/<pack>/<mode>.md` (no frontmatter — only `SKILL.md` is registered as a skill). Preserve the top-of-file metadata format. `SKILL.md` carries frontmatter then the comment headers; mode files carry just the comment headers:
