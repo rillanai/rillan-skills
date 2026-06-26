@@ -8,7 +8,12 @@ The installer source is in `cmd/rillan-skills/` with shared logic in `internal/d
 
 ## Build, Test, and Development Commands
 
-The build runner is [Task](https://taskfile.dev). Run from the repository root:
+The build runner is [Task](https://taskfile.dev). Dev/build tools (Task itself,
+golangci-lint, goimports, staticcheck, govulncheck, goreleaser) are tracked as
+`go tool` directives in `go.mod` — no separate installs are needed, and `go 1.24+`
+(already satisfied) bootstraps everything. The Taskfile and CI invoke them with
+`go tool <name>`; if `task` is not on your PATH, run `go tool task <name>`. Run from
+the repository root:
 
 - `task build` — build the `rillan-skills` binary into `bin/`.
 - `task list` — list every skill bundled in the binary.
