@@ -106,12 +106,63 @@ rillan-skills install --target . --tool claude --dry-run
 rillan-skills install --target . --tool claude --force
 ```
 
+### Install skills globally (user-level, all tools)
+
+Use `--global` to install into each tool's **user-level** config directory instead
+of a repository, so the skills are available across every project. `--global`
+installs **all** bundled packs (detection is meaningless against your home dir) and
+composes with `--tool`; pass `--tool all` to install for every supported tool at once:
+
+```bash
+# Install all packs globally for Claude Code only
+rillan-skills install --global --tool claude
+
+# Install all packs globally for every supported tool
+rillan-skills install --global --tool all
+
+# Preview a global install without writing
+rillan-skills install --global --tool all --dry-run
+
+# Remove everything installed globally (uses the manifest; never touches files it didn't install)
+rillan-skills uninstall --global --tool all
+```
+
+Per-tool global destinations:
+
+| Tool | Global destination |
+|---|---|
+| Claude Code | `~/.claude/skills/<pack>/SKILL.md` + `<pack>/<mode>.md` |
+| Codex | `~/.codex/skills/<pack>/SKILL.md` + `<pack>/<mode>.md` |
+| OpenCode | `~/.config/opencode/agent/<pack>.md` (single file: router + all modes inlined) |
+| Grok | **No standard skills directory** — skipped with a warning. Copy the desired packs from `skills/<pack>/` into your Grok prompt/config manually. |
+
+Grok is recognized (so `--tool grok` and `--tool all` report it) but has no
+well-defined skills location, so it is skipped rather than failing the run.
+
+### Install manifest
+
+Every install (per-repo or `--global`) records what it wrote to a manifest so
+re-installs can decide upgrade-vs-skip and uninstall can remove exactly what was
+installed:
+
+- **Per-repo:** `<target>/.rillan-skills/manifest.json`
+- **Global:** `~/.rillan-skills/manifest.json`
+
+The manifest records, per installed pack, the `tool`, `pack`, installed `version`,
+and the list of `files` written (relative to the scope root). On (re)install the
+bundled pack version (`<!-- version: X.Y.Z -->`) is compared against the manifest
+(falling back to the installed router's marker), and each pack is reported as
+`installed` / `upgraded X.Y.Z->A.B.C` / `up-to-date` / `reinstalled`. `uninstall`
+removes only the files the manifest recorded, so it never deletes unrelated skills
+sharing a directory.
+
 ### Other commands
 
 ```bash
 rillan-skills list                    # list all skills bundled in the binary
 rillan-skills uninstall --target .    # remove installed skill files
 rillan-skills uninstall --target . --tool codex --dry-run
+rillan-skills uninstall --global --tool all --dry-run
 ```
 
 ### Architecture: one root skill per concern
