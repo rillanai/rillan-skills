@@ -15,6 +15,11 @@ This skill defines the stable audit contract. Per-run inputs such as the reposit
 - Keep repository-specific instructions in the task prompt, not in this file.
 - When this skill conflicts with generic review behavior, follow this skill.
 
+## Knowledge-Graph Discovery (When Available)
+If a graphify knowledge graph (`graphify-out/`) is present, seed inventory and architecture mapping from `graphify-out/GRAPH_REPORT.md` and `graphify query`/`graphify path` instead of starting cold — then verify every graph-derived claim against repository evidence before recording it. `INFERRED` and `AMBIGUOUS` edges are leads, not findings; an unverified graph edge is `INFERENCE`, not evidence.
+
+If no `graphify-out/` directory exists, ignore this section.
+
 ## Tool Use
 This skill is tool-agnostic and works with Claude Code, Codex, OpenCode, and similar assistants. Map its guidance to whatever file-reading, editing, search, and shell-execution tools your environment exposes.
 

@@ -31,6 +31,15 @@ This skill is tool-agnostic and works with Claude Code, Codex, OpenCode, and sim
 - **Secrets stay out of logs and layers.** Assume every log is public and every artifact is tamper-inspectable.
 - **Observable failure.** When a job fails, the output tells you what, where, and how to reproduce. Silent failures are worse than loud ones.
 
+## Knowledge-Graph Discovery (When Available)
+If the repository carries a graphify knowledge graph (a `graphify-out/` directory), use it as a map of how jobs, workflows, and the code they build relate — never as ground truth.
+- Orient first from `graphify-out/GRAPH_REPORT.md` (or `graphify-out/wiki/index.md` when present): it shows reusable-workflow and job dependencies, shared actions/scripts, and which parts of the repo a pipeline touches.
+- For "what triggers this job", "what reuses this workflow/action", and blast-radius questions, prefer `graphify query "<question>"`, `graphify path "<A>" "<B>"`, and `graphify explain "<name>"` over grep — they traverse extracted and inferred edges across job, stage, and workflow boundaries that text search misses.
+- Every edge is tagged `EXTRACTED`, `INFERRED`, or `AMBIGUOUS`. Treat `EXTRACTED` as structural evidence; treat `INFERRED` and `AMBIGUOUS` as leads to confirm with the pipeline's own linters (e.g. `actionlint`) and a dry run. The graph never outranks a real pipeline run.
+- After changing pipeline definitions, run `graphify update .` (AST-only, no API cost) to keep the graph current.
+
+If no `graphify-out/` directory exists, ignore this section.
+
 ## Pipeline Shape
 
 ### Stages And Ordering

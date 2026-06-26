@@ -24,6 +24,15 @@ This skill is tool-agnostic and works with Claude Code, Codex, OpenCode, and sim
 - Run `terraform fmt`, `terraform validate`, and `terraform plan` yourself — do not claim a change is verified without tool output.
 - Before proposing a change to a shared module, inspect its callers to scope the blast radius.
 
+## Knowledge-Graph Discovery (When Available)
+If the repository carries a graphify knowledge graph (a `graphify-out/` directory), use it as a map to consult before broad text search — never as ground truth.
+- Orient first from `graphify-out/GRAPH_REPORT.md` (or `graphify-out/wiki/index.md` when present): god nodes, communities, and cross-file relationships show module composition and resource dependencies before you open a file.
+- For "what consumes this module/output", "what depends on this resource", and blast-radius questions, prefer `graphify query "<question>"`, `graphify path "<A>" "<B>"`, and `graphify explain "<name>"` over grep — they traverse extracted and inferred edges across module and resource boundaries that text search misses.
+- Every edge is tagged `EXTRACTED`, `INFERRED`, or `AMBIGUOUS`. Treat `EXTRACTED` as structural evidence; treat `INFERRED` and `AMBIGUOUS` as leads to confirm with `terraform validate` and `terraform plan`. The graph never outranks `terraform plan` and validation output.
+- After changing configuration, run `graphify update .` (AST-only, no API cost) to keep the graph current.
+
+If no `graphify-out/` directory exists, ignore this section.
+
 ## Core Principles
 
 ### DRY

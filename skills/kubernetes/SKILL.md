@@ -6,7 +6,7 @@ description: Kubernetes manifests and Kustomize work — author or review Deploy
 <!-- SPDX-FileCopyrightText: 2026 Rillan AI LLC -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-<!-- version: 3.0.0 -->
+<!-- version: 3.1.0 -->
 # Kubernetes
 
 Root skill for Kubernetes manifest work. This `SKILL.md` is the only file loaded up

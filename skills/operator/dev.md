@@ -39,6 +39,15 @@ This skill is tool-agnostic and works with Claude Code, Codex, OpenCode, and sim
 3. Make the smallest safe change to types, reconciliation logic, or generated artifacts.
 4. Re-check generation, tests, and upgrade implications before considering the task done.
 
+## Knowledge-Graph Discovery (When Available)
+If the repository carries a graphify knowledge graph (a `graphify-out/` directory), use it as a map to consult before broad text search — never as ground truth.
+- Orient first from `graphify-out/GRAPH_REPORT.md` (or `graphify-out/wiki/index.md` when present): god nodes, communities, and cross-file relationships expose the API/reconciler topology and owned-resource wiring before you open a file.
+- For "what watches this", "what owns that", and blast-radius questions, prefer `graphify query "<question>"`, `graphify path "<A>" "<B>"`, and `graphify explain "<symbol>"` over grep — they traverse extracted and inferred edges across package and controller boundaries that text search misses.
+- Every edge is tagged `EXTRACTED`, `INFERRED`, or `AMBIGUOUS`. Treat `EXTRACTED` as structural evidence; treat `INFERRED` and `AMBIGUOUS` as leads to confirm with `gopls`, the generators, the compiler, or `envtest`. The graph never outranks executable evidence.
+- After changing code, run `graphify update .` (AST-only, no API cost) to keep the graph current.
+
+If no `graphify-out/` directory exists, ignore this section.
+
 ## Default Verification
 - Run repository-standard generators for deep-copy, CRD, or manifests when needed.
 - Prefer focused Go tests plus `envtest` for reconciliation behavior.

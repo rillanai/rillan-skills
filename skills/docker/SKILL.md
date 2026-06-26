@@ -6,7 +6,7 @@ description: Use when writing or reviewing Dockerfiles or OCI container images �
 <!-- SPDX-FileCopyrightText: 2026 Rillan AI LLC -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-<!-- version: 3.0.0 -->
+<!-- version: 3.1.0 -->
 # Dockerfile And Container Image Mode
 
 ## Purpose
@@ -34,6 +34,15 @@ This skill is tool-agnostic and works with Claude Code, Codex, OpenCode, and sim
 - Reproducible: pinned base images, pinned dependencies, deterministic build steps.
 - Secrets never touch the image, even in intermediate layers.
 - Image metadata (labels, SBOM, signatures) is part of the artifact, not an afterthought.
+
+## Knowledge-Graph Discovery (When Available)
+If the repository carries a graphify knowledge graph (a `graphify-out/` directory), use it as a map for how this image fits the wider repo — what it builds, what it ships, and what depends on it — never as ground truth.
+- Orient first from `graphify-out/GRAPH_REPORT.md` (or `graphify-out/wiki/index.md` when present): it shows which services and binaries the build context covers before you trace the Dockerfile by hand.
+- For "what does this stage actually need", "which binary does this image ship", and dependency questions, prefer `graphify query "<question>"`, `graphify path "<A>" "<B>"`, and `graphify explain "<name>"` over grep — they traverse extracted and inferred edges across the build context that text search misses.
+- Every edge is tagged `EXTRACTED`, `INFERRED`, or `AMBIGUOUS`. Treat `EXTRACTED` as structural evidence; treat `INFERRED` and `AMBIGUOUS` as leads to confirm with `hadolint` and a real BuildKit build. The graph never outranks a real build.
+- After changing the build, run `graphify update .` (AST-only, no API cost) to keep the graph current.
+
+If no `graphify-out/` directory exists, ignore this section.
 
 ## Base Image Selection
 Prefer bases in this order. Move down the list only when the tier above cannot meet a genuine requirement:
