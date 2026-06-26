@@ -6,18 +6,15 @@ version: "3"
 vars:
   BIN_DIR: '{{.ROOT_DIR}}/bin'
   BIN: '{{.BIN_DIR}}/rillan-skills'
-  # Tool versions (mirror .github/workflows/ci.yml; bump together via Dependabot).
-  GOLANGCI_LINT_VERSION: v2.12.2
-  STATICCHECK_VERSION: v0.7.0
-  GOVULNCHECK_VERSION: v1.5.0
-  GOIMPORTS_VERSION: v0.47.0
-  GORELEASER_VERSION: v2.16.0
+  # Dev/build tools are tracked as `go tool` directives in go.mod (Go 1.24+);
+  # versions live there as the single source of truth and bump via Dependabot.
+  # Run them with `go tool <name>` — no separate install needed.
 
 tasks:
   default:
     desc: List available tasks
     cmds:
-      - task --list
+      - go tool task --list
 
   build:
     desc: Build the rillan-skills installer binary
@@ -39,18 +36,18 @@ tasks:
   lint:
     desc: Run golangci-lint
     cmds:
-      - go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@{{.GOLANGCI_LINT_VERSION}} run --timeout=5m
+      - go tool golangci-lint run --timeout=5m
 
   fmt:
     desc: Apply goimports to the tree
     cmds:
-      - go run golang.org/x/tools/cmd/goimports@{{.GOIMPORTS_VERSION}} -w -local github.com/rillanai/rillan-skills .
+      - go tool goimports -w -local github.com/rillanai/rillan-skills .
 
   fmt-check:
     desc: Fail if goimports would reformat any file
     cmds:
       - |
-        out=$(go run golang.org/x/tools/cmd/goimports@{{.GOIMPORTS_VERSION}} -l .)
+        out=$(go tool goimports -l .)
         if [ -n "$out" ]; then
           echo "goimports drift in:"
           echo "$out"
@@ -61,12 +58,12 @@ tasks:
   staticcheck:
     desc: Run staticcheck
     cmds:
-      - go run honnef.co/go/tools/cmd/staticcheck@{{.STATICCHECK_VERSION}} ./...
+      - go tool staticcheck ./...
 
   vuln:
     desc: Run govulncheck
     cmds:
-      - go run golang.org/x/vuln/cmd/govulncheck@{{.GOVULNCHECK_VERSION}} ./...
+      - go tool govulncheck ./...
 
   test:
     desc: Run unit tests with race detector and coverage
@@ -106,12 +103,12 @@ tasks:
   release:check:
     desc: Validate the GoReleaser config without building
     cmds:
-      - go run github.com/goreleaser/goreleaser/v2@{{.GORELEASER_VERSION}} check
+      - go tool goreleaser check
 
   release:snapshot:
     desc: Build a local snapshot release into dist/ (no tag, no publish)
     cmds:
-      - go run github.com/goreleaser/goreleaser/v2@{{.GORELEASER_VERSION}} release --snapshot --clean
+      - go tool goreleaser release --snapshot --clean
 
   clean:
     desc: Remove build artifacts
