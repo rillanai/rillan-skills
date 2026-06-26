@@ -6,7 +6,7 @@ description: Use to run a focused security review of code, configuration, or inf
 <!-- SPDX-FileCopyrightText: 2026 Rillan AI LLC -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-<!-- version: 3.0.0 -->
+<!-- version: 3.1.0 -->
 # Security Review Mode
 
 ## Purpose
@@ -60,6 +60,15 @@ If critical context is missing (internet-facing vs. internal, auth model), stop 
 - Severity is about blast radius and exploitability, not elegance of the fix.
 - A missing control is only a finding when the threat model calls for it. Not every service needs every control.
 - Report real findings, not theoretical ones. Hypothetical risks without a path to exploit are noise.
+
+## Knowledge-Graph Discovery (When Available)
+If the repository carries a graphify knowledge graph (a `graphify-out/` directory), use it as a map to trace reachability and trust boundaries before broad text search — never as ground truth or a finding on its own.
+- Orient first from `graphify-out/GRAPH_REPORT.md` (or `graphify-out/wiki/index.md` when present): god nodes and cross-file relationships expose entrypoints, shared state, and the modules that touch untrusted input.
+- To connect a source to a sink — `graphify path "<entrypoint>" "<dangerous-call>"` — or to enumerate everything that reaches a surface, prefer `graphify query`/`graphify explain` over grep; they traverse extracted and inferred edges across trust and module boundaries that text search misses.
+- Every edge is tagged `EXTRACTED`, `INFERRED`, or `AMBIGUOUS`. A graph edge is a lead, never a finding: confirm the data-flow path by reading the cited code and running the relevant scanners. The graph never outranks a confirmed exploit path or scanner evidence.
+- After changing code, run `graphify update .` (AST-only, no API cost) to keep the graph current.
+
+If no `graphify-out/` directory exists, ignore this section.
 
 ## Threat Surfaces
 Walk the surfaces below in order. Skip surfaces that genuinely don't apply to the scope (and say so in the output).

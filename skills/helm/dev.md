@@ -26,6 +26,15 @@ This skill is tool-agnostic and works with Claude Code, Codex, OpenCode, and sim
 - Fail fast with `required`, schema validation, and defensive defaults when omission would create broken releases.
 - Keep Kubernetes concerns visible. Do not hide important probes, resources, security context, or affinity behind confusing helper stacks.
 
+## Knowledge-Graph Discovery (When Available)
+If the repository carries a graphify knowledge graph (a `graphify-out/` directory), use it as a map to consult before broad text search — never as ground truth.
+- Orient first from `graphify-out/GRAPH_REPORT.md` (or `graphify-out/wiki/index.md` when present): god nodes, communities, and cross-file relationships show chart/subchart structure and which templates consume which values before you open a file.
+- For "what reads this value", "what this helper feeds", and blast-radius questions, prefer `graphify query "<question>"`, `graphify path "<A>" "<B>"`, and `graphify explain "<name>"` over grep — they traverse extracted and inferred edges across chart and template boundaries that text search misses.
+- Every edge is tagged `EXTRACTED`, `INFERRED`, or `AMBIGUOUS`. Treat `EXTRACTED` as structural evidence; treat `INFERRED` and `AMBIGUOUS` as leads to confirm with `helm template`/`helm lint` and a read of the rendered manifests. The graph never outranks rendered output.
+- After changing templates or values, run `graphify update .` (AST-only, no API cost) to keep the graph current.
+
+If no `graphify-out/` directory exists, ignore this section.
+
 ## Default Workflow
 1. Inspect `Chart.yaml`, `values.yaml`, `templates/`, and any environment overlays before editing.
 2. Identify the public values surface and any compatibility risk.

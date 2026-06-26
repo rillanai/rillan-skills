@@ -28,6 +28,15 @@ This skill is tool-agnostic and works with Claude Code, Codex, OpenCode, and sim
 - Avoid hidden coupling across overlays, namespaces, and controllers.
 - Secure by default: a manifest that does not explicitly set security context, resource requests, or a NetworkPolicy should be treated as incomplete.
 
+## Knowledge-Graph Discovery (When Available)
+If the repository carries a graphify knowledge graph (a `graphify-out/` directory), use it as a map to consult before broad text search — never as ground truth.
+- Orient first from `graphify-out/GRAPH_REPORT.md` (or `graphify-out/wiki/index.md` when present): god nodes, communities, and cross-file relationships show workload/overlay/RBAC structure before you open a file.
+- For "what selects this", "what references this ConfigMap/Secret", and blast-radius questions, prefer `graphify query "<question>"`, `graphify path "<A>" "<B>"`, and `graphify explain "<name>"` over grep — they traverse extracted and inferred edges across manifest, overlay, and controller boundaries that text search misses.
+- Every edge is tagged `EXTRACTED`, `INFERRED`, or `AMBIGUOUS`. Treat `EXTRACTED` as structural evidence; treat `INFERRED` and `AMBIGUOUS` as leads to confirm with `kubeconform` or `kubectl apply --dry-run=server`. The graph never outranks validated output.
+- After changing manifests, run `graphify update .` (AST-only, no API cost) to keep the graph current.
+
+If no `graphify-out/` directory exists, ignore this section.
+
 ## Default Workflow
 1. Inspect the target workload, related ConfigMaps/Secrets, RBAC, and any overlay or patch chain.
 2. Identify whether the change affects rollout behavior, identity, or API compatibility.

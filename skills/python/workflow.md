@@ -70,6 +70,15 @@ Before running default commands, inspect the repository for its canonical workfl
 
 Prefer repository-standard commands over generic defaults when they are explicit and relevant.
 
+## Knowledge-Graph Discovery (When Available)
+If the repository carries a graphify knowledge graph (a `graphify-out/` directory), use it as a map to consult before broad text search — never as ground truth.
+- Orient first from `graphify-out/GRAPH_REPORT.md` (or `graphify-out/wiki/index.md` when present): god nodes, communities, and cross-file relationships give you the architecture before you open a file.
+- For "how does X relate to Y", consumer discovery, and blast-radius questions, prefer `graphify query "<question>"`, `graphify path "<A>" "<B>"`, and `graphify explain "<symbol>"` over grep — they traverse extracted and inferred edges across module boundaries that text search misses.
+- Every edge is tagged `EXTRACTED`, `INFERRED`, or `AMBIGUOUS`. Treat `EXTRACTED` as structural evidence; treat `INFERRED` and `AMBIGUOUS` as leads to confirm with `pyright`/`pylsp`, the interpreter, or tests. The graph never outranks executable evidence in the Truth Hierarchy.
+- After changing code, run `graphify update .` (AST-only, no API cost) to keep the graph current.
+
+If no `graphify-out/` directory exists, ignore this section.
+
 ## Task Classification
 Before acting, classify the task into one primary mode:
 - understand code
@@ -92,6 +101,7 @@ If a task spans multiple modes, choose the dominant mode first and sequence the 
 ### Minimize Blast Radius
 - Identify affected symbols, modules, packages, entrypoints, and consumers before changing code.
 - Distinguish public API changes from internal implementation changes.
+- When a graphify graph is present, use `graphify path`/`graphify query` to surface cross-module consumers and latent couplings before estimating blast radius (see Knowledge-Graph Discovery).
 - Prefer the smallest viable change that solves the task.
 
 ### Require Verification
