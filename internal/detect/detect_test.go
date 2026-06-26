@@ -67,6 +67,44 @@ func TestDetectByMarker(t *testing.T) {
 	}
 }
 
+func TestDetectHCPTerraform(t *testing.T) {
+	// A cloud {} block alongside plain Terraform sources triggers both packs.
+	cloud := map[string]string{
+		"main.tf":    "resource {}\n",
+		"backend.tf": "terraform {\n  cloud {\n    organization = \"acme\"\n  }\n}\n",
+	}
+	r, err := Run(writeTree(t, cloud))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{"terraform", "hcp-terraform"} {
+		if !slices.Contains(r.Packs, p) {
+			t.Errorf("want pack %q for cloud block, got %v", p, r.Packs)
+		}
+	}
+
+	// An app.terraform.io registry source also triggers the overlay.
+	reg := map[string]string{
+		"main.tf": "module \"net\" {\n  source = \"app.terraform.io/acme/net/aws\"\n}\n",
+	}
+	r2, err := Run(writeTree(t, reg))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(r2.Packs, "hcp-terraform") {
+		t.Errorf("want hcp-terraform for app.terraform.io source, got %v", r2.Packs)
+	}
+
+	// Plain Terraform with no TFC markers must NOT trigger the overlay.
+	r3, err := Run(writeTree(t, map[string]string{"main.tf": "resource \"aws_s3_bucket\" \"b\" {}\n"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(r3.Packs, "hcp-terraform") {
+		t.Errorf("hcp-terraform should not trigger without TFC markers, got %v", r3.Packs)
+	}
+}
+
 func TestDetectOperator(t *testing.T) {
 	// Detection keys on a path containing "/api/" (i.e. api nested under another
 	// dir) plus a controller-runtime dependency in go.mod.

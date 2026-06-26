@@ -1,13 +1,15 @@
 <!-- SPDX-FileCopyrightText: 2026 Rillan AI LLC -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-<!-- version: 3.0.0 -->
+<!-- version: 3.1.0 -->
 # Terraform Audit Deep Dive
 
 ## Purpose
 Use this skill to run a phased, evidence-based deep-dive audit of a Terraform codebase. This skill is for enterprise-grade infrastructure-as-code audits that require broad codebase coverage, resource accounting, architecture analysis, security review, compliance review, and implementation-grade recommendations.
 
 This skill defines the stable audit contract. Per-run inputs such as the repository path, the requested phase, and any special focus areas must be supplied in the task prompt.
+
+This audit contract is backend- and cloud-neutral and applies to Terraform or OpenTofu. When the repository uses HCP Terraform / Terraform Cloud, load the `hcp-terraform` skill alongside this one — it adds a TFC audit layer (workspace inventory, `tfe_outputs` accounting, workspace-boundary/blast-radius analysis, and a TFC Integration grade dimension) on top of these phases.
 
 ## Skill Use
 - Load this skill only when the user explicitly wants a deep Terraform repository audit or a clearly similar phased infrastructure-as-code review.
@@ -60,7 +62,7 @@ Provide these when available:
 - Repository path
 - Requested phase name exactly as written in this skill
 - Whether vendored and generated code should be fully reviewed or summarized
-- Any explicit focus areas such as state boundaries, RBAC policies, network security, module design, CI/CD integration, compliance requirements, multi-cloud patterns, or TFC workspace organization
+- Any explicit focus areas such as state boundaries, RBAC policies, network security, module design, CI/CD integration, compliance requirements, multi-cloud patterns, or remote-execution/workspace organization
 - Any explicit exclusions
 
 ## Operating Stance
@@ -153,24 +155,24 @@ Produce:
 - One-line purpose for each file
 - All identified root modules (directories containing backend configuration or intended to be applied directly)
 - All identified child modules (directories used as `module` sources)
-- TFC workspace inventory: workspace name, mapped directory, organization, and any workspace tags
-- Cross-workspace reference inventory: all `data "tfe_outputs"` blocks with source workspace and consuming module
-- Provider inventory: all providers, their versions, their aliases, and cloud distribution (Azure, GCP, vSphere, other)
-- Backend configuration summary: backend type (TFC cloud block, Azure Blob Storage legacy, or other), workspace name, organization, locking mechanism, encryption status per root module
-- Environment structure: directory + workspace hybrid pattern with evidence showing how directories map to TFC workspaces
-- Data source inventory: all `data` blocks with their type and purpose, with special attention to `data "tfe_outputs"` and cross-workspace references
-- CI/CD integration points: pipeline definitions, plan/apply steps, approval gates, drift detection, TFC run triggers
+- State/isolation unit inventory: backend type per root module and the state unit it owns (workspace name, S3 key, GCS prefix, etc.), mapped directory, locking mechanism, encryption status. If the repo uses a remote-execution backend / HCP Terraform, also inventory its workspaces (name, organization, tags) — defer the deep TFC-specific accounting to the `hcp-terraform` overlay audit
+- Cross-state reference inventory: all `data "terraform_remote_state"` blocks (and, if present, `data "tfe_outputs"`) with source state/workspace and consuming module
+- Provider inventory: all providers, their versions, their aliases, and cloud distribution (AWS, Azure, GCP, vSphere, other)
+- Backend configuration summary: backend type (`local`, `s3`, `gcs`, `azurerm`, `consul`, `cloud`/HCP, `kubernetes`, `http`, or other), state unit identifier, locking mechanism, encryption status per root module
+- Environment structure: directory-to-state-unit mapping with evidence showing how directories map to isolation units
+- Data source inventory: all `data` blocks with their type and purpose, with special attention to cross-state references
+- CI/CD integration points: pipeline definitions, plan/apply steps, approval gates, drift detection, runner triggers
 - Variable file inventory: all `.tfvars` files, `variables.tf` files, and variable precedence
-- Module source inventory: TFC private registry modules (with `app.terraform.io` source addresses), local modules, git-sourced modules, and public registry modules
+- Module source inventory: registry modules (public registry; private registry such as `app.terraform.io`/Spacelift/Scalr), local modules, and git-sourced modules
 - Totals block with:
   - Total files
   - Total `.tf` files
   - Total `.tfvars` files
   - Total root modules
   - Total child modules
-  - Total TFC workspaces identified
-  - Total cross-workspace references (`data "tfe_outputs"` count)
-  - Total resources by provider (count), broken down by cloud (Azure, GCP, vSphere, other)
+  - Total state/isolation units identified (and TFC workspaces, if applicable)
+  - Total cross-state references (`terraform_remote_state` + `tfe_outputs` count)
+  - Total resources by provider (count), broken down by cloud (AWS, Azure, GCP, vSphere, other)
   - Total data sources by provider (count)
   - `UNREVIEWED/INACCESSIBLE` list with impact notes
 
@@ -187,21 +189,21 @@ Produce exactly two artifact families:
 `resource_index.csv` rules:
 - One row per resource or data source block
 - Columns:
-  - `resource_type` — The Terraform resource type (e.g., `azurerm_resource_group`, `google_compute_instance`, `vsphere_virtual_machine`, `data.tfe_outputs`)
+  - `resource_type` — The Terraform resource type (e.g., `aws_s3_bucket`, `azurerm_resource_group`, `google_compute_instance`, `vsphere_virtual_machine`, `data.terraform_remote_state`)
   - `logical_name` — The logical name in the Terraform configuration (e.g., `main`, `primary`, `environment`)
   - `module_path` — Full module path (e.g., `root`, `module.networking`, `module.compute.module.cluster`)
-  - `provider` — The provider managing this resource (e.g., `azurerm`, `google`, `vsphere`, `tfe`, `kubernetes`). Note the cloud distribution explicitly.
+  - `provider` — The provider managing this resource (e.g., `aws`, `azurerm`, `google`, `vsphere`, `tfe`, `kubernetes`). Note the cloud distribution explicitly.
   - `count_or_for_each` — Whether the resource uses `count`, `for_each`, or neither; include the expression if dynamic. Flag any use of `count` with lists (should be `for_each`).
   - `lifecycle_rules` — Active lifecycle rules: `create_before_destroy`, `prevent_destroy`, `ignore_changes`, `replace_triggered_by`; blank if none. Note `ignore_changes = [tags]` for dynamic tag patterns.
-  - `dependencies_top` — Top explicit and notable implicit dependencies (resource addresses), including cross-workspace references via `data.tfe_outputs`
+  - `dependencies_top` — Top explicit and notable implicit dependencies (resource addresses), including cross-state references via `data.terraform_remote_state` or `data.tfe_outputs`
 
 `module_index.csv` rules:
 - One row per module call
 - Columns:
   - `module` — The module call name as it appears in the configuration (e.g., `module.networking`)
   - `path` — File system path to the module source
-  - `source` — The `source` argument value (local path, TFC private registry address `app.terraform.io/...`, or git URL)
-  - `source_type` — Classification: `tfc_registry`, `local`, `git`, `public_registry`
+  - `source` — The `source` argument value (local path, public registry shorthand, private registry address such as `app.terraform.io/...`, or git URL)
+  - `source_type` — Classification: `public_registry`, `private_registry`, `local`, `git`
   - `version` — The `version` constraint if specified; blank for local modules
   - `inputs` — Count of input variables passed to the module call
   - `outputs` — Count of outputs defined by the module
@@ -215,27 +217,27 @@ Additional constraints:
 - Do not include architecture analysis, recommendations, grades, or refactor advice in this phase.
 - Include both `resource` and `data` blocks in `resource_index.csv`, prefixing data source types with `data.` for clarity.
 - Record `count` and `for_each` expressions accurately; do not simplify dynamic expressions.
-- Note multi-cloud provider distribution in a summary table: count of resources per provider (azurerm, google, vsphere, tfe, kubernetes, other).
+- Note multi-cloud provider distribution in a summary table: count of resources per provider (aws, azurerm, google, vsphere, tfe, kubernetes, other).
 
 ### PHASE 3 - Architecture + State Boundaries
 Using evidence from Phase 1 and Phase 2:
-- Describe the infrastructure architecture as implemented, including multi-cloud distribution (Azure primary, GCP secondary, vSphere on-prem)
-- Map TFC workspace boundaries: how many workspaces, what is in each, isolation level per environment and per cluster, workspace naming convention consistency
-- Analyze cross-workspace coupling: all `data "tfe_outputs"` references, direction of dependency flow, which workspaces are producers vs. consumers, whether the dependency graph has cycles or excessive fan-out
-- Assess workspace boundary quality: are boundaries drawn at the right granularity? Are there workspaces that are too large (high blast radius) or too small (excessive cross-workspace coupling)?
-- Analyze module dependency graph: which root modules call which child modules, depth of nesting (max 2 levels expected), reuse patterns, TFC private registry vs. local sourcing
-- Review provider configuration: aliases, multi-subscription (Azure) patterns, multi-project (GCP) patterns, vSphere integration, authentication strategy (workload identity, managed identity, service accounts)
-- Identify environment promotion flow: how changes move from dev to staging to production, whether module versions are pinned differently per environment via TFC registry versions
-- Assess blast radius: what is the maximum damage a single `terraform apply` can cause in each root module/workspace
-- Map cross-workspace references: `data "tfe_outputs"` usage patterns, any legacy `terraform_remote_state` usage, hardcoded references between state boundaries
-- Identify state management risks: overly broad workspaces, missing locking (should not occur with TFC), any legacy Azure Blob Storage backends not yet migrated, state files in version control
-- Assess backend configuration consistency across environments: TFC cloud block consistency, organization and workspace naming patterns
-- Identify any legacy patterns: Azure Blob Storage backends, `terraform_remote_state` usage that should be migrated to `data "tfe_outputs"`, pre-1.x syntax
+- Describe the infrastructure architecture as implemented, including multi-cloud distribution (which clouds are present and their relative roles — primacy is project context, not assumed)
+- Map state/isolation-unit boundaries: how many units, what is in each, isolation level per environment and per cluster, naming convention consistency. (If the repo uses HCP Terraform, defer deep workspace-boundary analysis to the `hcp-terraform` overlay audit.)
+- Analyze cross-state coupling: all `data "terraform_remote_state"` (and `tfe_outputs`, if present) references, direction of dependency flow, which units are producers vs. consumers, whether the dependency graph has cycles or excessive fan-out
+- Assess state-boundary quality: are boundaries drawn at the right granularity? Are there units that are too large (high blast radius) or too small (excessive cross-state coupling)?
+- Analyze module dependency graph: which root modules call which child modules, depth of nesting (roughly two levels as a soft guideline), reuse patterns, registry vs. local sourcing
+- Review provider configuration: aliases, multi-account/subscription/project patterns, on-prem integration, authentication strategy (workload identity, OIDC role assumption, managed identity, service accounts)
+- Identify environment promotion flow: how changes move from dev to staging to production, whether module versions are pinned differently per environment
+- Assess blast radius: what is the maximum damage a single `terraform apply` can cause in each root module/state unit
+- Map cross-state references: `terraform_remote_state` (and `tfe_outputs`) usage patterns, hardcoded references between state boundaries
+- Identify state management risks: overly broad state units, missing or disabled locking, state files in version control
+- Assess backend configuration consistency across environments: backend type consistency, state-unit naming patterns
+- Identify any legacy patterns: pre-1.x syntax, deprecated resource usage, brittle cross-state coupling
 
 Constraints:
 - Anchor every claim to file paths and resource addresses.
 - Keep detailed refactor plans deferred to Phase 5.
-- Focus on actual module dependency direction, workspace boundaries, cross-workspace coupling, and blast radius, not desired architecture labels.
+- Focus on actual module dependency direction, state boundaries, cross-state coupling, and blast radius, not desired architecture labels.
 
 ### PHASE 4 - Security + Compliance Audit
 Security review areas:
@@ -247,8 +249,8 @@ Security review areas:
 - Workload identity federation: Azure managed identities (user-assigned vs. system-assigned), GCP workload identity, service account key usage (should be zero)
 - Per-service identity isolation: whether each service has its own identity or shares a common one
 - Local accounts: any resources with local admin accounts enabled when RBAC is available (e.g., AKS `local_account_disabled`, database admin accounts)
-- TFC workspace access: team permissions, run permissions, state access controls
-- Cross-account/cross-project trust: Azure service principals in foreign tenants, GCP cross-project IAM bindings
+- Remote state / execution backend access: who can read state and run plan/apply (bucket/IAM policies, workspace team permissions, run permissions). If the backend is HCP Terraform, defer workspace-permission depth to the `hcp-terraform` overlay audit
+- Cross-account/cross-project trust: AWS cross-account role assumption, Azure service principals in foreign tenants, GCP cross-project IAM bindings
 
 **Encryption**:
 - At-rest encryption on storage: Azure Storage (encryption scope, customer-managed keys via Key Vault), GCP Cloud Storage (CMEK), managed disks, databases
@@ -268,8 +270,8 @@ Security review areas:
 **Secrets Management**:
 - Hardcoded secrets in `.tf` or `.tfvars` files
 - `sensitive` marking on variables and outputs
-- Key Vault / Secret Manager usage for runtime secrets
-- TFC workspace variable sensitivity settings
+- Secret manager usage for runtime secrets (Vault, AWS Secrets Manager, Azure Key Vault, GCP Secret Manager)
+- Backend/runner variable sensitivity settings (CI secrets, workspace variables)
 - State file exposure: sensitive values in outputs without `sensitive = true`
 
 **Public Exposure**:
@@ -282,18 +284,18 @@ Security review areas:
 - GCP: Cloud Audit Logs configuration, organization policy constraints, Security Command Center enablement
 - vSphere: audit logging configuration
 - Cross-cloud: centralized log aggregation strategy, alerting on security-relevant events
-- Drift detection posture: whether regular plan runs are scheduled (TFC scheduled runs), alerting on unexpected changes, state refresh strategy
-- Policy-as-code: Sentinel policies in TFC, Azure Policy, GCP organization policies. Note that `tfsec`/`checkov`/OPA are not currently in use but should be recommended.
+- Drift detection posture: whether regular plan runs are scheduled (runner scheduled runs), alerting on unexpected changes, state refresh strategy
+- Policy-as-code: OPA/conftest, Checkov policies, cloud-native policy (AWS SCPs/Config, Azure Policy, GCP organization policies), and Sentinel where HCP Terraform is in use. Recommend `tfsec`/`trivy`/`checkov`/OPA in CI where absent.
 
 **Supply Chain Security**:
-- Module sources: TFC private registry (preferred), local, git, public registry. Flag any modules sourced from untrusted public registries.
+- Module sources: registry (public or private), local, git. Flag any modules sourced from untrusted public registries.
 - Provider version pinning and `.terraform.lock.hcl` presence and commitment
 - Third-party module trust assessment
 
 **Tagging and Resource Governance**:
-- `standard_tags` compliance: whether all taggable resources have the standard `standard_tags` applied
-- Required tag keys present: `ApplicationName`, `ProductName`, `Team`, `Contact`, `Environment`
-- Dynamic tags (`CreationDate`, `Expiration`) with `lifecycle { ignore_changes = [tags] }` pattern
+- Tag-map compliance: whether all taggable resources have the project's standard tag map applied
+- Required tag keys present: check against the key set defined by project policy (supplied in the invoking prompt), not a fixed schema
+- Any dynamic/computed tags handled with surgical `lifecycle { ignore_changes = [...] }` on the specific keys, not blanket `ignore_changes = [tags]`
 - GCP label compliance (equivalent of tags)
 
 Output requirements:
@@ -314,28 +316,29 @@ Produce:
 - Overall letter grade `A-F`
 - Subgrades for:
   - Clean Code — formatting, naming consistency (kebab-case resources, snake_case Terraform names), DRY, variable hygiene, `for_each` over `count`
-  - Architecture — module design, composition, separation of concerns, directory + workspace hybrid consistency
+  - Architecture — module design, composition, separation of concerns, directory-to-state-unit consistency
   - Security — RBAC, workload identity, encryption, network, secrets, public exposure, per-service identities
-  - Compliance — audit logging coverage (Azure Activity Log, GCP Cloud Audit Logs), monitoring, policy-as-code readiness
-  - State Management — TFC workspace isolation, workspace boundaries, cross-workspace coupling via `data "tfe_outputs"`, blast radius, legacy backend migration status
-  - Modularity — module boundaries, TFC private registry usage, reuse, versioning, surface area, nesting depth
-  - TFC Integration — workspace naming consistency, cross-workspace reference patterns, run triggers, Sentinel policy usage, workspace-to-directory mapping quality
-  - CI/CD — plan review, apply approval, drift detection, tooling, TFC integration
+  - Compliance — audit logging coverage (AWS CloudTrail, Azure Activity Log, GCP Cloud Audit Logs), monitoring, policy-as-code readiness
+  - State Management — state/isolation-unit boundaries, cross-state coupling via `terraform_remote_state` (or backend equivalent), locking, encryption, blast radius
+  - Modularity — module boundaries, registry usage, reuse, versioning, surface area, nesting depth
+  - CI/CD — plan review, apply approval, drift detection, tooling, runner integration
   - Docs/DX — module README files (hand-maintained), variable descriptions, output descriptions, onboarding clarity
+
+When the repository uses HCP Terraform, the `hcp-terraform` overlay audit adds a **TFC Integration** subgrade (workspace naming, cross-workspace references, run triggers, Sentinel usage); do not grade that axis from this core audit.
 - Justification for each grade with anchored evidence
 - Prioritized refactor recommendations using `P0`, `P1`, and `P2`
 - Effort estimate for each item: `S`, `M`, or `L`
 - Risk estimate for each item: `Low`, `Med`, or `High`
 - Step-by-step implementation plan per item
 - Tests or validation steps required
-- Rollout notes including state migration considerations and TFC workspace changes
+- Rollout notes including state migration considerations and backend/state-unit changes
 - Code cleanup recommendations
 - Module isolation and design recommendations
 - Future enhancements and ideas
-- 90-day roadmap:
-  - Weeks 1-2: stabilize — fix P0 security issues (RBAC enforcement, workload identity gaps, public exposure), ensure all TFC workspaces have correct access controls, pin provider versions, add `terraform fmt` and `terraform validate` to CI
-  - Weeks 3-6: restructure — decompose any oversized workspaces, establish module versioning in TFC private registry, implement proper workspace boundaries, migrate any legacy Azure Blob Storage backends to TFC, add `tflint` to CI, consider adding `tfsec`/`trivy`
-  - Weeks 7-12: harden — implement drift detection via TFC scheduled runs, consider adding compliance scanning with `checkov`, establish environment promotion flow via TFC registry module versions, document all modules with hand-maintained READMEs, implement TFC team-based RBAC for workspace access, audit and clean up cross-workspace `data "tfe_outputs"` coupling
+- Phased remediation roadmap (sequence by priority; do not invent fixed calendar dates):
+  - Stabilize first — fix P0 security issues (RBAC enforcement, workload identity gaps, public exposure), ensure remote state and backend access controls are correct, pin provider versions, add `terraform fmt` and `terraform validate` to CI
+  - Restructure next — decompose any oversized state units, establish module versioning in a registry, implement proper state boundaries, add `tflint` and `tfsec`/`trivy` to CI
+  - Harden last — implement drift detection via scheduled runs, add compliance scanning with `checkov`, establish a clear environment promotion flow, document all modules with hand-maintained READMEs, enforce least-privilege access to state and execution, and audit/clean up cross-state coupling
 
 Constraints:
 - End Phase 5 with `FINAL STATE_SNAPSHOT` and `DONE`.
@@ -346,12 +349,12 @@ Constraints:
 - When citing module-level behavior without one clear resource, cite the most relevant file path and state that the claim is module-level.
 - When behavior is distributed across several files, cite all primary anchors rather than collapsing to one.
 - For multi-file claims, list the smallest set of anchors that fully supports the conclusion.
-- For cross-workspace references, cite both the producing workspace/output and the consuming `data "tfe_outputs"` block.
+- For cross-state references, cite both the producing state/output and the consuming `data "terraform_remote_state"` (or `tfe_outputs`) block.
 
 ## Handling Generated, Vendor, And External Material
 - Generated code such as `.terraform.lock.hcl` may be summarized if it is clearly machine-generated, but its existence and impact on reproducibility must still be recorded.
 - Vendored or third-party modules should usually be treated as dependency surface, not first-party architecture, unless the repository modifies or relies heavily on them operationally.
-- TFC private registry modules referenced via `source = "app.terraform.io/..."` should be noted for version pinning, registry organization, and trust assessment. Their internal implementation is in scope only if the module source code is accessible in the audited repository.
+- Private registry modules referenced via `source = "app.terraform.io/..."` (or another private registry) should be noted for version pinning, registry organization, and trust assessment. Their internal implementation is in scope only if the module source code is accessible in the audited repository.
 - Public registry modules referenced via `source = "registry.terraform.io/..."` or short-form `source = "org/module/provider"` should be noted for version pinning and trust assessment, but their internal implementation is out of scope unless explicitly requested.
 - If the user explicitly requires exhaustive treatment of vendored or third-party module code, follow that request.
 
@@ -361,8 +364,8 @@ Constraints:
 - Operationally useful to an engineering lead or infrastructure team
 - Free of filler, motivational language, and generic best-practice padding
 - Readable in chunks for large repositories
-- Multi-cloud aware: findings and accounting distinguish between Azure, GCP, and vSphere resources
-- TFC-aware: workspace boundaries, cross-workspace references, and registry sourcing are first-class audit concerns
+- Multi-cloud aware: findings and accounting distinguish between AWS, Azure, GCP, vSphere, and other providers
+- State-aware: state/isolation-unit boundaries, cross-state references, and registry sourcing are first-class audit concerns
 
 ## Practical Execution Notes
 - Prefer fast repository discovery and indexing tools.
@@ -379,7 +382,7 @@ Use this skill with a prompt that supplies the missing run-specific inputs. Exam
 ```text
 Use Terraform Audit Deep Dive on /path/to/repo.
 Execute PHASE 1 - Inventory + Entrypoints only.
-Emphasize TFC workspace boundaries, cross-workspace coupling, RBAC policies, and network security.
+Emphasize state/isolation-unit boundaries, cross-state coupling, RBAC policies, and network security.
 Treat vendored modules as summarized unless they are modified locally.
 ```
 

@@ -25,6 +25,7 @@ func Packs() []string {
 		"cicd",
 		"docker",
 		"go",
+		"hcp-terraform",
 		"helm",
 		"kubernetes",
 		"operator",

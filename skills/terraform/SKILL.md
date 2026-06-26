@@ -13,6 +13,12 @@ Root skill for Terraform work. This `SKILL.md` is the only file loaded up front;
 routes to the mode files in this directory, which you read **on demand** with your file
 tool. Do not guess a mode file's contents — read it.
 
+This core is backend- and cloud-neutral: it applies to any backend (local, s3, azurerm,
+gcs, consul, cloud/HCP, kubernetes, http), any cloud (AWS, Azure, GCP, vSphere, …), and
+Terraform or OpenTofu. **Using HCP Terraform / Terraform Cloud? Also load the
+`hcp-terraform` skill** — it overlays this one with TFC-specific depth (the `cloud {}`
+block, `data "tfe_outputs"`, workspaces, private registry, Sentinel, run workflow).
+
 ## Modes — load the one matching the task
 - `dev.md` — author or modify HCL: modules, resources, variables, outputs, provider config.
 - `test.md` — `terraform test`, Terratest, OPA/Rego, checkov, plan-time assertions.

@@ -1,13 +1,15 @@
 <!-- SPDX-FileCopyrightText: 2026 Rillan AI LLC -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-<!-- version: 3.0.0 -->
+<!-- version: 3.1.0 -->
 # Terraform Migration Planning
 
 ## Purpose
-Use this skill when planning or executing migrations for Terraform codebases. This includes Terraform version upgrades (1.x to 1.y), provider version upgrades, state migrations, module refactoring, TFC workspace restructuring, backend changes, tool migrations, and state splitting operations.
+Use this skill when planning or executing migrations for Terraform codebases. This includes Terraform version upgrades (1.x to 1.y), provider version upgrades, state migrations, module refactoring, backend changes, tool migrations, and state splitting operations.
 
-This skill defines the migration planning and execution contract for Terraform work. It is intended for version upgrades, state operations, module restructuring, TFC workspace migrations, backend migrations, and tool transitions.
+This skill defines the migration planning and execution contract for Terraform work. It is intended for version upgrades, state operations, module restructuring, backend migrations, and tool transitions.
+
+This guidance is backend- and cloud-neutral and applies to Terraform or OpenTofu. When the migration targets or originates from HCP Terraform / Terraform Cloud (the `cloud {}` backend, workspace renames/reorgs, cross-org moves, variable sets, or an `azurerm`/`s3`/`gcs` → TFC switch), load the `hcp-terraform` skill — it owns those TFC-specific procedures. The backend-change mechanics here apply to any backend pairing.
 
 ## Skill Use
 - Load this skill when the task involves any kind of Terraform migration, upgrade, or structural change to state, modules, or backends.
@@ -33,15 +35,15 @@ This skill is tool-agnostic and works with Claude Code, Codex, OpenCode, and sim
 Use this skill when the user asks for any of the following:
 - Terraform version upgrades (1.x to 1.y)
 - Provider version upgrades with breaking changes
-- TFC workspace restructuring (renaming, reorganizing, moving between organizations)
-- Migrating from Azure Blob Storage or other backends to TFC
-- State migrations (backend changes, state restructuring, cross-workspace moves)
+- Backend migrations (changing backends — any backend to any backend)
+- State migrations (backend changes, state restructuring, cross-state moves)
 - Module refactoring (extracting modules, splitting modules, reorganizing module boundaries)
-- Tool migrations (Terraform to OpenTofu)
-- State splitting (monolith state to multiple TFC workspaces)
+- Tool migrations (Terraform to OpenTofu and back)
+- State splitting (monolith state to multiple state units)
 - Import of existing infrastructure into Terraform management
-- Moving resources between state files or TFC workspaces
-- Managing TFC workspace variables during migration
+- Moving resources between state files or isolation units
+
+For HCP Terraform–specific migrations (workspace restructuring, cross-org moves, variable sets, migrating an existing backend to the `cloud {}` block), use the `hcp-terraform` skill alongside this one.
 
 Do not use this skill for:
 - Writing new Terraform code without a migration context (use a Terraform development skill)
@@ -197,78 +199,12 @@ terraform state pull > source-state.json
 terraform state push destination-state.json
 ```
 
-### TFC Workspace Migrations
-Migrations specific to Terraform Cloud workspace management.
+### Changing Backends (Any Backend To Any Backend)
+Moving state from one backend to another (e.g., `local` → `s3`, `azurerm` → `gcs`, `s3` → `cloud`). The mechanics are the same regardless of the backend pairing.
 
-**Workspace Renaming**:
-When renaming TFC workspaces:
-1. Update workspace name in TFC (UI or API).
-2. Update all `data "tfe_outputs"` references in consuming workspaces that reference the old workspace name.
-3. Update VCS trigger configurations if workspace names are used in branch or path filters.
-4. Update any CI/CD scripts that reference the workspace name.
-5. Run `terraform plan` in all affected workspaces to verify no unexpected changes.
-6. Update documentation (READMEs, AGENTS.md, runbooks) with the new workspace name.
-
-**Workspace Reorganization**:
-When restructuring workspaces (e.g., splitting a monolith workspace into component workspaces):
-1. Back up the current workspace state via `terraform state pull` or the TFC API.
-2. Create new workspaces in TFC with appropriate naming, VCS connections, and variable configuration.
-3. Move resources from the source workspace state to destination workspace states:
-```bash
-# Pull state from source workspace
-cd source-workspace/
-terraform state pull > ../source-backup.json
-
-# Move resources to new workspace state files
-terraform state mv -state-out=../networking/terraform.tfstate \
-  azurerm_virtual_network.main azurerm_virtual_network.main
-terraform state mv -state-out=../networking/terraform.tfstate \
-  azurerm_subnet.main azurerm_subnet.main
-
-# Push state to new TFC workspace
-cd ../networking/
-terraform state push terraform.tfstate
-```
-4. Configure `data "tfe_outputs"` in consuming workspaces:
-```hcl
-data "tfe_outputs" "networking" {
-  organization = "my-org"
-  workspace    = "platform-prod-networking"
-}
-
-resource "azurerm_linux_virtual_machine" "app" {
-  subnet_id = data.tfe_outputs.networking.values.app_subnet_id
-  # ...
-}
-```
-5. Run `terraform plan` in each new workspace to verify no changes.
-6. Update run triggers between workspaces if needed.
-
-**Moving Workspaces Between Organizations**:
-When migrating TFC workspaces to a different organization:
-1. Document all workspace configuration: variables, variable sets, team access, VCS connections, run triggers, notification configurations.
-2. Pull state from the source workspace: `terraform state pull > migration-backup.json`.
-3. Create the new workspace in the destination organization with matching configuration.
-4. Push state to the new workspace: `terraform state push migration-backup.json`.
-5. Update VCS connections to point to the correct repository.
-6. Recreate workspace variables and variable sets (these do not transfer between organizations).
-7. Update all `data "tfe_outputs"` references in other workspaces to point to the new organization and workspace name.
-8. Run `terraform plan` in the migrated workspace to verify no changes.
-9. Verify consuming workspaces can read outputs from the new location.
-10. Decommission the old workspace only after full verification.
-
-**Managing TFC Workspace Variables During Migration**:
-When migrating workspaces, variables require careful handling:
-- **Terraform variables**: Export variable values (non-sensitive) and recreate in the new workspace. For sensitive variables, coordinate with the secrets owner to re-enter values.
-- **Environment variables**: Document all environment variables (e.g., provider credentials) and recreate them. Sensitive values must be re-entered manually.
-- **Variable sets**: Verify which variable sets are attached to the workspace and ensure equivalent sets exist in the destination organization or workspace.
-- **Variable precedence**: Be aware that workspace-specific variables override variable set values. Document the intended precedence.
-
-### Migrating from Azure Blob Storage to TFC
-When migrating state from Azure Blob Storage backend to TFC-managed state:
-
-1. Ensure the TFC workspace exists and is configured with appropriate variables.
-2. In the Terraform configuration, change the backend from `azurerm` to `cloud`:
+1. Back up the current state: `terraform state pull > state-backup-$(date +%Y%m%d%H%M%S).json`.
+2. If the destination requires a pre-existing state container (bucket, prefix, workspace), create it first.
+3. Update the `backend` (or `cloud`) block in the `terraform` block to the new configuration. Example, `azurerm` → `s3`:
 
 Before:
 ```hcl
@@ -285,21 +221,22 @@ terraform {
 After:
 ```hcl
 terraform {
-  cloud {
-    organization = "my-org"
-
-    workspaces {
-      name = "platform-prod-networking"
-    }
+  backend "s3" {
+    bucket       = "my-tf-state"
+    key          = "production/networking.tfstate"
+    region       = "us-east-1"
+    use_lockfile = true
   }
 }
 ```
 
-3. Run `terraform init -migrate-state`.
-4. Confirm the migration when prompted.
+4. Run `terraform init -migrate-state` and confirm the migration when prompted.
 5. Verify with `terraform plan` showing no changes.
-6. Do not delete the Azure Blob Storage state until the TFC migration is fully verified across all environments.
-7. Update documentation and runbooks to reflect the new TFC backend.
+6. Do not delete the source state until the migration is fully verified across all environments.
+7. Update documentation and runbooks to reflect the new backend.
+8. Update cross-state references: consumers using `data "terraform_remote_state"` must point at the new backend config.
+
+For migrations into HCP Terraform (the `cloud {}` block, workspace renames/reorgs, cross-org moves, and variable-set handling), see the `hcp-terraform` skill — those procedures layer on top of this one.
 
 ### Module Refactoring
 Restructuring module boundaries without affecting deployed infrastructure.
@@ -321,23 +258,23 @@ Restructuring module boundaries without affecting deployed infrastructure.
 
 **Module versioning strategy**:
 - Use semantic versioning for shared modules.
-- When using the TFC private registry, tag releases in the module repository. TFC automatically picks up tagged versions.
+- When using a registry (public, or a private registry such as HCP Terraform / Spacelift / Scalr), tag releases in the module repository; the registry picks up tagged versions.
 - Pin consumers to specific versions or version ranges.
 - Document breaking changes in a changelog.
 - Provide migration guides when releasing major versions.
 
 **Migrating module sources**:
-When moving modules to the TFC private registry:
+When moving modules between sources (local → git, git → registry, etc.):
 ```hcl
-# Before: local or Git source
+# Before: Git source
 module "network" {
   source = "git::https://github.com/org/terraform-modules.git//network?ref=v1.0.0"
 }
 
-# After: TFC private registry
+# After: registry source (public registry shown; a private registry uses app.terraform.io/{org}/{module}/{provider})
 module "network" {
-  source  = "app.terraform.io/my-org/network/azurerm"
-  version = "1.0.0"
+  source  = "terraform-aws-modules/vpc/aws"
+  version = "5.1.0"
 }
 ```
 
@@ -355,34 +292,37 @@ terraform init -migrate-state
 
 This interactively migrates state from the old backend to the new backend. For automation, use `-input=false` with appropriate backend configuration.
 
-**Workspace migration (TFC workspace restructuring)**:
-When migrating from workspace-per-environment to directory-per-environment within TFC:
-1. For each workspace, pull state: `terraform state pull > <workspace-name>.tfstate`.
+**Restructuring isolation units (e.g., CLI-workspace-per-env → directory-per-env)**:
+When migrating from a single state with multiple CLI workspaces to a directory-per-environment layout:
+1. For each existing state, pull it: `terraform state pull > <name>.tfstate`.
 2. Create separate directory structures for each environment.
-3. Create new TFC workspaces for each environment directory.
-4. Push state to each new workspace: `terraform state push <workspace-name>.tfstate`.
-5. Configure VCS connections for each new workspace.
+3. Create the new state unit for each environment directory (bucket key, prefix, or workspace).
+4. Push state to each new unit: `terraform state push <name>.tfstate`.
+5. Configure VCS/runner connections for each new unit.
 6. Verify each environment with `terraform plan` showing no changes.
-7. Decommission the old workspaces.
+7. Decommission the old state units.
+
+For HCP Terraform workspace restructuring specifically (renames, reorgs, cross-org moves, variable sets), see the `hcp-terraform` skill.
 
 ### Tool Migrations
 
-**Terraform to OpenTofu**:
+**Terraform to OpenTofu (and back)**:
+OpenTofu is a first-class peer to Terraform; the migration is mechanical for compatible versions.
 - OpenTofu 1.6.x is compatible with Terraform 1.6.x state and configuration.
-- Replace `terraform` CLI with `tofu` CLI. Commands are identical.
-- Update CI/CD pipelines to use OpenTofu binaries.
-- Update backend configuration: TFC is not compatible with OpenTofu. Switch to a supported backend (Azure Blob Storage, GCS, S3, or the OpenTofu-compatible registry).
-- Update provider lock files: run `tofu init -upgrade`.
-- Verify with `tofu plan` showing no changes.
-- Update documentation references from Terraform to OpenTofu.
+- Replace the `terraform` CLI with `tofu` CLI (or vice versa). Commands are identical.
+- Update CI/CD pipelines to use the chosen binary.
+- Backend configuration: most backends (`local`, `s3`, `gcs`, `azurerm`, `consul`, `kubernetes`, `http`) work with both tools. The HCP Terraform `cloud {}` backend is Terraform-only — if migrating off it to OpenTofu, switch to another supported backend first (see the `hcp-terraform` skill for that backend's specifics).
+- Update provider lock files: run `tofu init -upgrade` (or `terraform init -upgrade`).
+- Verify with `tofu plan` (or `terraform plan`) showing no changes.
+- Update documentation references to the chosen tool.
 - Key differences to address:
   - Registry: OpenTofu uses its own registry. Most providers are available.
-  - Licensing: OpenTofu is MPL 2.0 / later BSL-free.
-  - Features: OpenTofu may diverge in features over time. Check compatibility for the specific version.
+  - Licensing: OpenTofu is MPL 2.0; Terraform is BSL.
+  - Features: the two may diverge over time. Check compatibility for the specific version.
   - State encryption: OpenTofu supports native state encryption, which Terraform does not.
 
 ### State Splitting
-Breaking a monolith state file into multiple state files or TFC workspaces.
+Breaking a monolith state file into multiple state files or isolation units.
 
 **When to split state**:
 - State file is large enough to cause slow plans (hundreds of resources).
@@ -390,12 +330,12 @@ Breaking a monolith state file into multiple state files or TFC workspaces.
 - Different change cadences (networking changes rarely, application infra changes frequently).
 - Blast radius reduction: a bad apply should not risk unrelated infrastructure.
 
-**Splitting into TFC workspaces**:
+**Splitting into separate state units**:
 1. Back up the monolith state.
-2. Identify cohesive resource groups for each new workspace.
-3. Create new TFC workspaces for each group.
+2. Identify cohesive resource groups for each new state unit.
+3. Create the new state unit for each group (bucket key, prefix, or workspace).
 4. Write the Terraform configuration for each new root module.
-5. Move resources from the monolith state to each new workspace:
+5. Move resources from the monolith state to each new unit:
 ```bash
 # Pull monolith state
 cd monolith/
@@ -403,38 +343,39 @@ terraform state pull > ../monolith-backup.json
 
 # Move resources to new state files
 terraform state mv -state-out=../networking/terraform.tfstate \
-  azurerm_virtual_network.main azurerm_virtual_network.main
+  aws_vpc.main aws_vpc.main
 terraform state mv -state-out=../networking/terraform.tfstate \
-  azurerm_subnet.app azurerm_subnet.app
+  aws_subnet.app aws_subnet.app
 terraform state mv -state-out=../networking/terraform.tfstate \
-  azurerm_subnet.data azurerm_subnet.data
+  aws_subnet.data aws_subnet.data
 
-# Push to new TFC workspace
+# Push to the new state unit's backend
 cd ../networking/
 terraform state push terraform.tfstate
 ```
-6. Verify each new workspace with `terraform plan` showing no changes.
+6. Verify each new state unit with `terraform plan` showing no changes.
 7. Verify the monolith `terraform plan` shows only the removed resources as "will be destroyed" (because they are no longer in its configuration).
 
-**Dependency management between split workspaces**:
-Use `data "tfe_outputs"` to share values between TFC workspaces:
+**Dependency management between split units**:
+Use `data "terraform_remote_state"` (or the backend's equivalent) to share values between units:
 ```hcl
-data "tfe_outputs" "networking" {
-  organization = "my-org"
-  workspace    = "platform-prod-networking"
+data "terraform_remote_state" "networking" {
+  backend = "s3"
+  config = {
+    bucket = "my-tf-state"
+    key    = "platform/prod/networking.tfstate"
+    region = "us-east-1"
+  }
 }
 
-resource "azurerm_linux_virtual_machine" "app" {
-  name                = "vm-app"
-  subnet_id           = data.tfe_outputs.networking.values.app_subnet_id
-  resource_group_name = data.tfe_outputs.networking.values.resource_group_name
-  location            = data.tfe_outputs.networking.values.location
-  size                = var.vm_size
+resource "aws_instance" "app" {
+  subnet_id = data.terraform_remote_state.networking.outputs.app_subnet_id
+  ami       = var.ami_id
   # ...
 }
 ```
 
-Prefer `data "tfe_outputs"` over `terraform_remote_state` when using TFC. The `tfe_outputs` data source is purpose-built for TFC cross-workspace references and integrates with TFC access controls. Use `terraform_remote_state` only when referencing state in non-TFC backends (e.g., legacy Azure Blob Storage state).
+`terraform_remote_state` is the backend-agnostic default. On HCP Terraform, `data "tfe_outputs"` is a purpose-built alternative that integrates with TFC access controls — see the `hcp-terraform` skill.
 
 ## Migration Planning Process
 
@@ -442,14 +383,14 @@ Prefer `data "tfe_outputs"` over `terraform_remote_state` when using TFC. The `t
 **ALWAYS back up state before any migration operation.** No exceptions.
 
 ```bash
-# For TFC-managed state
+# For remote-backend state
 terraform state pull > state-backup-$(date +%Y%m%d%H%M%S).json
 
 # For local state
 cp terraform.tfstate terraform.tfstate.backup.$(date +%Y%m%d%H%M%S)
 ```
 
-TFC also maintains state version history, which can be used for rollback via the TFC UI or API. However, always keep an independent backup before migration operations.
+Some backends maintain their own state version history usable for rollback (versioned S3 buckets, HCP Terraform state history, etc.). Regardless, always keep an independent backup before migration operations.
 
 Keep backups until the migration is fully verified and stable in all environments.
 
@@ -460,18 +401,18 @@ Before executing any migration:
 - **Determine blast radius**: What is the worst case if this migration goes wrong? Data loss? Downtime? Resource recreation?
 - **Check for stateful resources**: Databases, storage accounts, DNS records, and certificates are high-risk. Recreation means data loss or downtime.
 - **Check for resources with prevent_destroy**: These will block accidental destruction but should still be migrated carefully.
-- **Check cross-workspace dependencies**: Which other TFC workspaces consume outputs from the workspace being migrated? Those consuming workspaces will need updates.
+- **Check cross-state dependencies**: Which other state units consume outputs from the unit being migrated? Those consumers will need updates.
 
 ### Dependency Analysis
-- **What depends on migrated resources?** Other TFC workspaces reading outputs via `data "tfe_outputs"`, applications using resource IDs, monitoring pointing at resource names.
-- **What do migrated resources depend on?** Resources in other TFC workspaces, external systems, service principals, network connectivity.
+- **What depends on migrated resources?** Other state units reading outputs via `terraform_remote_state` (or the backend's equivalent), applications using resource IDs, monitoring pointing at resource names.
+- **What do migrated resources depend on?** Resources in other state units, external systems, service principals, network connectivity.
 - **Are there circular dependencies?** State splitting can reveal circular dependencies that must be broken.
 
 ### Risk Assessment
 Rate each migration step on:
 - **Data loss potential**: Can this step cause data loss? (Database migrations, storage changes, encryption key rotations.)
 - **Downtime potential**: Can this step cause service interruption? (Resource recreation, DNS changes, network changes.)
-- **Rollback difficulty**: How hard is it to undo? (TFC state version rollback is straightforward. Recreated databases are not.)
+- **Rollback difficulty**: How hard is it to undo? (Restoring a previous state version is straightforward. Recreated databases are not.)
 - **Blast radius**: How many services or users are affected if this goes wrong?
 
 ### Plan/Apply Diff Analysis
@@ -491,10 +432,10 @@ Structure every migration as a series of small, independently verifiable steps:
 
 ### Rollback Plan
 For every migration, document:
-- **State restore procedure**: How to restore the backed-up state file. For TFC, this can be done via the UI (rollback to previous state version) or via `terraform state push`.
+- **State restore procedure**: How to restore the backed-up state file — `terraform state push`, or the backend's own state-version rollback (versioned bucket, HCP Terraform state history).
 - **Version pin rollback**: How to revert Terraform or provider version constraints.
 - **Code rollback**: Which git commit to revert to.
-- **TFC workspace rollback**: How to revert workspace configuration changes (variables, VCS connections, run triggers).
+- **Backend config rollback**: How to revert backend/state-unit configuration changes. (For HCP Terraform workspace settings — variables, VCS connections, run triggers — see the `hcp-terraform` skill.)
 - **Timing**: How long the rollback takes and what happens to changes made between migration and rollback.
 
 ## Migration Execution Rules
@@ -507,7 +448,7 @@ These rules are non-negotiable for any migration operation:
 - **Use moved blocks over state surgery when possible (Terraform 1.1+).** `moved` blocks are declarative, reviewable, and reversible. `terraform state mv` is imperative and harder to audit.
 - **Use import blocks over terraform import CLI when possible (Terraform 1.5+).** `import` blocks are declarative and can be code-reviewed. `terraform import` CLI modifies state directly.
 - **Use removed blocks over terraform state rm when possible (Terraform 1.7+).** `removed` blocks are declarative and reviewable.
-- **Lock state during migration.** TFC handles state locking automatically. For non-TFC backends, use backend-native locking (Azure Blob Storage lease, GCS object versioning). If manual locking is needed, use `terraform force-unlock` only as a last resort.
+- **Lock state during migration.** Use the backend's native locking (S3 lockfile/DynamoDB, Azure Blob lease, GCS, or HCP Terraform's automatic locking). If manual locking is needed, use `terraform force-unlock` only as a last resort.
 - **Test migration in non-production first.** Always migrate dev or staging before production. Verify the process works and the plan is clean before touching production state.
 - **Document every migration step as it is executed.** Keep a log of commands run, plan output reviewed, and verification results. This log is critical for debugging if something goes wrong.
 - **Never run terraform apply -auto-approve during migration.** Always review the plan manually during migration operations. Auto-approve is for routine CI/CD, not for state surgery.
@@ -635,7 +576,7 @@ tfmigrate apply migration.hcl  # Execute
 - When recommending version upgrades, cite the specific changelog entries or upgrade guide sections that apply.
 - When recommending state operations, verify the resource addresses exist in state.
 - When estimating blast radius, base it on actual resource dependencies, not assumptions.
-- When recommending TFC workspace changes, verify current workspace configuration, variable sets, and cross-workspace dependencies.
+- When recommending backend/state-unit changes, verify current backend configuration and cross-state dependencies. (For HCP Terraform workspace/variable-set changes, see the `hcp-terraform` skill.)
 - If a migration path has not been tested in the current codebase, label it as untested and recommend non-production verification first.
 
 ## Anti-Patterns To Reject
@@ -649,11 +590,10 @@ tfmigrate apply migration.hcl  # Execute
 - **Big-bang migrations**: Moving all resources in one operation. If it fails, everything is in an unknown state. Break migrations into small, verifiable steps.
 - **Migrating state across environment boundaries without isolation**: Using the same state operations on resources from different environments in a single operation.
 - **Ignoring provider version compatibility during Terraform upgrades**: Upgrading Terraform without verifying that all providers are compatible with the new version.
-- **Deleting backup state before verifying the migration**: After migrating to a new backend or workspace, always verify with `terraform plan` before deleting backup state files or decommissioning old backends.
+- **Deleting backup state before verifying the migration**: After migrating to a new backend or state unit, always verify with `terraform plan` before deleting backup state files or decommissioning old backends.
 - **Using terraform state push without understanding the contents**: `terraform state push` overwrites remote state. Only use it when you are certain the local state is correct and complete.
 - **Force-unlocking state without understanding who holds the lock**: `terraform force-unlock` should be a last resort. Verify that no other process is actively modifying state before forcing an unlock.
-- **Forgetting to update cross-workspace references**: When renaming or moving TFC workspaces, all `data "tfe_outputs"` references in consuming workspaces must be updated.
-- **Not recreating workspace variables after organization migration**: TFC workspace variables and variable sets do not transfer between organizations. They must be manually recreated.
+- **Forgetting to update cross-state references**: When renaming or moving a state unit, all `data "terraform_remote_state"` (or `tfe_outputs`) references in consumers must be updated.
 
 ## Invocation Template
 Use this skill with a prompt that supplies repository-specific context. Example:
@@ -663,6 +603,6 @@ Use Terraform Migration Planning.
 Plan the upgrade from Terraform 1.5 to 1.8 for the infrastructure at /path/to/repo.
 Identify breaking changes in providers, recommend moved blocks for the module refactoring,
 and produce a phased execution plan with rollback procedures.
-Include TFC workspace restructuring for the networking and compute split.
+Split the networking and compute state into separate isolation units.
 Test the migration path in the dev environment first.
 ```

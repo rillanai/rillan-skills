@@ -1,7 +1,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Rillan AI LLC -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-<!-- version: 3.0.0 -->
+<!-- version: 3.1.0 -->
 # Terraform Test Strategy And Generation
 
 ## Purpose
@@ -170,7 +170,7 @@ Create, verify, and destroy real cloud resources.
 - In shared cloud subscriptions or projects without test isolation.
 
 ### Compliance Tests (Recommended)
-Policy enforcement against Terraform plans and configurations. These tools are recommended for adoption but may not be currently in use.
+Policy enforcement against Terraform plans and configurations. Adopt these tools to catch misconfigurations before they reach production.
 
 **When to consider**:
 - Enforcing organizational security policies (encryption required, public access blocked, approved VM sizes).
@@ -751,7 +751,7 @@ tests/
 ## Coverage Expectations
 
 ### Minimum Coverage Standard
-Every module published to the TFC private registry should have at minimum:
+Every shared module published to a registry (public, private, or git) should have at minimum:
 - **Validation tests**: Every variable with a `validation` block must have a corresponding `expect_failures` test proving the validation rejects bad input.
 - **Minimal configuration test**: A plan-only test with only required variables set, proving the module plans successfully with defaults.
 - **Naming convention test**: A plan-only test asserting that computed resource names follow the expected pattern.
@@ -783,7 +783,7 @@ Track which input scenarios are tested:
 Track which compliance policies are enforced:
 - Map compliance requirements (CIS benchmarks, organizational policies) to specific test assertions or policy rules.
 - Identify compliance requirements without automated enforcement.
-- When compliance scanning tools (tfsec, checkov) are adopted, track rule results over time to detect regressions.
+- Track compliance scanning results (tfsec, checkov) over time to detect regressions.
 
 ## Test Commands
 Standard test commands for Terraform codebases:
