@@ -95,13 +95,32 @@ func TestDetectHCPTerraform(t *testing.T) {
 		t.Errorf("want hcp-terraform for app.terraform.io source, got %v", r2.Packs)
 	}
 
-	// Plain Terraform with no TFC markers must NOT trigger the overlay.
-	r3, err := Run(writeTree(t, map[string]string{"main.tf": "resource \"aws_s3_bucket\" \"b\" {}\n"}))
+	// The tfe provider / tfe_* resources trigger the overlay too — covers
+	// self-hosted TFE and workspace-management repos with no app.terraform.io.
+	tfe := map[string]string{
+		"workspaces.tf": "resource \"tfe_workspace\" \"app\" {\n  organization = \"acme\"\n}\n",
+	}
+	r3, err := Run(writeTree(t, tfe))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if slices.Contains(r3.Packs, "hcp-terraform") {
-		t.Errorf("hcp-terraform should not trigger without TFC markers, got %v", r3.Packs)
+	if !slices.Contains(r3.Packs, "hcp-terraform") {
+		t.Errorf("want hcp-terraform for tfe_* resource, got %v", r3.Packs)
+	}
+
+	// Plain Terraform with no TFC markers must NOT trigger the overlay.
+	r4, err := Run(writeTree(t, map[string]string{"main.tf": "resource \"aws_s3_bucket\" \"b\" {}\n"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(r4.Packs, "hcp-terraform") {
+		t.Errorf("hcp-terraform should not trigger without TFC markers, got %v", r4.Packs)
+	}
+
+	// Overlay is emitted after its base in the stable pack order.
+	ti, hi := slices.Index(r.Packs, "terraform"), slices.Index(r.Packs, "hcp-terraform")
+	if ti < 0 || hi < 0 || hi < ti {
+		t.Errorf("want terraform before hcp-terraform in pack order, got %v", r.Packs)
 	}
 }
 

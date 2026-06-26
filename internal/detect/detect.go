@@ -21,6 +21,13 @@ import (
 // identifiers like `cloudfront` or `icloud`.
 var cloudBlock = regexp.MustCompile(`(?m)^\s*cloud\s*\{`)
 
+// tfeProvider matches use of the `tfe` provider — the provider block, its
+// required_providers source (`hashicorp/tfe`), or any quoted `tfe_*` resource
+// or data type (e.g. `data "tfe_outputs"`, `resource "tfe_workspace"`). This
+// catches self-hosted TFE and workspace-management repos that never reference
+// app.terraform.io.
+var tfeProvider = regexp.MustCompile(`provider\s+"tfe"|hashicorp/tfe|"tfe_\w`)
+
 // Result is the outcome of a detection pass over a target directory.
 type Result struct {
 	Packs   []string // skill packs (e.g. "go", "rust", "kubernetes")
@@ -88,7 +95,8 @@ func Run(target string) (Result, error) {
 
 	// Stable order
 	r.Packs = append(r.Packs, crossCutting...)
-	for _, p := range []string{"cicd", "docker", "go", "hcp-terraform", "helm", "kubernetes", "operator", "python", "rust", "terraform"} {
+	// hcp-terraform follows terraform: it is an overlay loaded after the base.
+	for _, p := range []string{"cicd", "docker", "go", "helm", "kubernetes", "operator", "python", "rust", "terraform", "hcp-terraform"} {
 		if _, ok := r.Reasons[p]; ok {
 			r.Packs = append(r.Packs, p)
 		}
@@ -188,8 +196,8 @@ func (h *hits) hasHCPTerraform() bool {
 		}
 		s := string(b)
 		if strings.Contains(s, "app.terraform.io") ||
-			strings.Contains(s, "tfe_outputs") ||
-			cloudBlock.MatchString(s) {
+			cloudBlock.MatchString(s) ||
+			tfeProvider.MatchString(s) {
 			return true
 		}
 	}

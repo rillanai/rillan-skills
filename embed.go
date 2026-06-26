@@ -25,7 +25,6 @@ func Packs() []string {
 		"cicd",
 		"docker",
 		"go",
-		"hcp-terraform",
 		"helm",
 		"kubernetes",
 		"operator",
@@ -35,5 +34,8 @@ func Packs() []string {
 		"rust",
 		"security",
 		"terraform",
+		// hcp-terraform is an overlay on the base terraform pack; keep it
+		// directly after terraform so list/install output reflects load order.
+		"hcp-terraform",
 	}
 }

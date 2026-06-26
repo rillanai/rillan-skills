@@ -7,7 +7,7 @@
 ## Purpose
 Use this overlay when writing or reviewing Terraform on HCP Terraform / Terraform Cloud (TFC). It adds the TFC-specific backend, state, module-sourcing, secrets, policy, and run-workflow depth on top of `terraform/dev.md`. Load `terraform/dev.md` first as the baseline; everything here assumes its general rules (DRY/KISS/YAGNI, typing/validation, lifecycle, `for_each`, `moved`/`import`) already apply.
 
-When this overlay and the base skill agree, the base wins by default; this file only overrides where TFC changes the mechanics (the backend, cross-state references, module registry, secrets injection, runner workflow).
+Where this overlay and `terraform/dev.md` conflict, this overlay wins for the TFC-specific mechanics it covers (the backend, cross-state references, module registry, secrets injection, runner workflow); everywhere else the base rules stand unchanged.
 
 ## When This Overlay Applies
 - The `terraform` block uses a `cloud {}` block (or the project is configured against `app.terraform.io` / a TFE instance).
