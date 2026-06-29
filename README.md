@@ -33,6 +33,7 @@ The Go, Rust, and Python stacks are layered: `workflow` is the default entrypoin
 | `adr-write` | Write, review, and supersede Architecture Decision Records. MADR-compatible. |
 | `planning-decompose` | Turn an ambiguous request into a verifiable plan: goal, milestones, risks, rollback. |
 | `rfc-write` | Structured RFC proposals upstream of an ADR — motivation, alternatives, rollout. |
+| `socratic-gate` | Thinking guardrails over design/decision work: synthesis-first gate, decision surfacing, generic-pattern depth audit. |
 | `docker-image` | Dockerfile design: scratch → distroless → slim, multi-stage, non-root, digest pinning, SBOM. |
 | `security-review` | Stack-agnostic focused security review with severity-ranked findings. |
 | `cicd-core` | Platform-agnostic CI/CD principles — stage ordering, secrets, OIDC, retries. |
@@ -325,6 +326,10 @@ Turn an ambiguous or large request into a verifiable plan: goal, acceptance crit
 
 Structured proposals for non-trivial changes to architecture, protocols, tooling, or process. RFC sits upstream of ADR — the RFC is the proposal under discussion, the ADR records the decision. Template covers motivation, goals/non-goals, current state, proposal, real alternatives including "do nothing", impact, rollout plan with reversibility, open questions, and review plan with dates and decision mechanism.
 
+### `socratic-gate`
+
+Adversarial thinking-guardrails layer loaded alongside `planning`, `rfc`, `adr`, or any `*-audit` / `security` / `cicd` review. Three protocols: a **Synthesis-First Gate** (draft and red-team your own one-paragraph position before asking questions or emitting output), **Decision Surfacing** (expose every consequential fork as a weighted choice in a Decision Ledger instead of silently picking and burying the rationale in a process log), and a **Depth Audit** (a scored check that flags generic patterns, reflex defaults, and skipped alternatives before a proposal is finalized). The design (`planning` / `rfc` / `adr`) skills carry a tailored inline gate; the `*-audit` / `security` / `cicd` skills scale from a Depth Audit on localized fixes up to the full protocol on architectural recommendations; the Go/Rust/Python `workflow` skills route novel work through `planning` / `adr` / `rfc` before implementation. The point is anti-atrophy — keep the human as the decider and the model out of autopilot, not to let the model work unassisted.
+
 ### `docker-image`
 
 Container image design with a strong preference order for base images: **scratch → distroless → slim (Alpine, Debian slim) → full distro**. Covers multi-stage builds, BuildKit secrets and cache mounts, non-root UID, read-only root filesystem, digest pinning, OCI metadata labels, SBOM and cosign signing, multi-arch, and size budgets by tier.
@@ -404,6 +409,7 @@ with `task release:snapshot`.
 │   ├── rfc/      └─ SKILL.md
 │   ├── rust/     └─ SKILL.md + policy, workflow, dev, audit, docs, test, migrate, ci (.md)
 │   ├── security/ └─ SKILL.md
+│   ├── socratic/ └─ SKILL.md
 │   └── terraform/ └─ SKILL.md + dev, audit, docs, test, migrate (.md)
 ├── .goreleaser.yaml          # cross-platform release builds
 ├── release-please-config.json

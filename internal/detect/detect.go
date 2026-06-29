@@ -35,7 +35,7 @@ type Result struct {
 }
 
 // Cross-cutting packs are always installed regardless of detection.
-var crossCutting = []string{"adr", "rfc", "planning", "security"}
+var crossCutting = []string{"adr", "rfc", "planning", "security", "socratic"}
 
 // Run walks the target repo and returns the relevant pack set.
 func Run(target string) (Result, error) {

@@ -1,7 +1,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Rillan AI LLC -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-<!-- version: 3.1.0 -->
+<!-- version: 3.2.0 -->
 # Go Engineering Workflow
 
 ## Purpose
@@ -90,6 +90,23 @@ Before acting, classify the task into one primary mode:
 - validate or verify
 
 If a task spans multiple modes, choose the dominant mode first and sequence the others explicitly.
+
+## Plan Before Novel Work
+Default to building only what you understand and can verify. When the task is **novel** — no existing precedent in this repo to copy — stop and design before you write code.
+
+Novel work includes:
+- a new package, module, service, or binary
+- a new third-party dependency, or a new use of an existing one that changes its role
+- a new public API, interface, or data model — anything other callers or stored data will depend on
+- a new concurrency, lifecycle, or transport design
+- a change to a boundary the codebase currently treats as fixed
+
+For novel work, before implementation:
+1. Route to the `planning` skill to decompose the work into verifiable, reversible steps.
+2. If the task embeds a consequential, hard-to-reverse decision (framework, schema, protocol, boundary), record it with the `adr` skill — or, if it crosses teams or needs discussion first, the `rfc` skill — *before* coding, not after.
+3. Run the `socratic` synthesis gate: commit to your own design, attack it, and surface the real decisions to the user as weighted choices rather than picking silently mid-implementation.
+
+This gate does **not** apply to routine work — a localized bug fix, a change with an existing pattern to follow, or a refactor under test coverage. Do not turn a one-line fix into a planning ceremony. The test is novelty and blast radius, not size: a ten-line change that introduces a new dependency or a new public interface is novel; a hundred-line change that follows an established pattern is not.
 
 ## Global Workflow Rules
 

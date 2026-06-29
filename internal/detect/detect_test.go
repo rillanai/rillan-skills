@@ -32,7 +32,7 @@ func TestCrossCuttingAlwaysPresent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, p := range []string{"adr", "rfc", "planning", "security"} {
+	for _, p := range []string{"adr", "rfc", "planning", "security", "socratic"} {
 		if !slices.Contains(r.Packs, p) {
 			t.Errorf("cross-cutting pack %q missing from %v", p, r.Packs)
 		}

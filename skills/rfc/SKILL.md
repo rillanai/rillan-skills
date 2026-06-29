@@ -6,7 +6,7 @@ description: Use to author, review, or revise Request for Comments (RFC) documen
 <!-- SPDX-FileCopyrightText: 2026 Rillan AI LLC -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-<!-- version: 3.0.0 -->
+<!-- version: 3.1.0 -->
 # RFC Mode
 
 ## Purpose
@@ -59,6 +59,15 @@ The invoking prompt should provide:
 - prior art: related RFCs, ADRs, incidents, tickets
 
 If the problem statement is vague ("we should improve X"), stop and ask for specifics. Vague RFCs produce vague discussions.
+
+## Synthesis-First Gate
+Before you fill the template — before any clarifying question — commit to your own proposal and attack it. An RFC written straight into the template tends to launder a half-formed idea into an official-looking document; the gate forces the thinking the template assumes you already did.
+
+1. **Draft, unassisted.** Write your real one-paragraph proposal — what you would actually do and why — before you touch the Alternatives or Impact sections.
+2. **Red-team it.** Name the strongest objection a reviewer will raise, the load-bearing assumption that would sink it, and what you must verify.
+3. **Surface the forks, don't bury them.** The genuine decisions belong in `## Alternatives Considered` as real options weighed on stated criteria — not one option plus strawmen. When a fork is consequential and you can't settle it from evidence, raise it as an open question for the reviewers rather than quietly choosing.
+
+For the full protocol — the gate, the Decision Ledger, and the Depth Audit that flags generic patterns and one-real-option-plus-strawmen — load the `socratic` skill alongside this one.
 
 ## RFC Lifecycle
 Status values, in order. Every RFC should record its current status at the top.

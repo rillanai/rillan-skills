@@ -6,7 +6,7 @@ description: Use to run a focused security review of code, configuration, or inf
 <!-- SPDX-FileCopyrightText: 2026 Rillan AI LLC -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-<!-- version: 3.1.0 -->
+<!-- version: 3.2.0 -->
 # Security Review Mode
 
 ## Purpose
@@ -219,3 +219,11 @@ Threat model: untrusted external clients, trusted internal callers, no admin UI 
 Focus on input validation, authz, SSRF, and supply chain. Run gosec, govulncheck, trivy image, gitleaks.
 Report findings grouped by severity with concrete fixes.
 ```
+
+## Recommendations Are Architecture: Full Socratic Intent
+Findings are evidence-driven, but a recommendation is a design act — and architectural recommendations are exactly where buried decisions and generic patterns do the most damage. Scale the rigor to the recommendation, not to a fixed template:
+
+- **Architectural output** — a modernization or refactor plan, a new boundary, package split, or dependency, a structural remediation, anything that forecloses future options — gets the **full** `socratic` protocol: the **Synthesis-First Gate** (commit to your own recommendation and red-team it before you present it), the **Decision Ledger** (surface each consequential fork as a weighted choice the user decides, not a pick buried in the report), and the **Depth Audit**.
+- **Localized, evidence-obvious fixes** — a missing nil check, a pinned version, a tightened permission — get the **Depth Audit** alone.
+
+Run the Depth Audit on every recommendation regardless. A recommendation FLAGs when it could be pasted into a different repo unchanged, reaches for a reflex default (add a cache/queue/retry/index/abstraction, split the service, "add rate limiting") without tying it to the evidence you gathered, leans on buzzwords ("scalable", "robust", "idiomatic", "best-practice") in place of a mechanism, or offers no alternative and no "do nothing" cost. Fix the FLAG by anchoring to the evidence, or surface it as an open question — never ship generic advice as a finding.

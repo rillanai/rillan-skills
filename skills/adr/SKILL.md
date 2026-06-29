@@ -6,7 +6,7 @@ description: Use to author, review, or supersede Architecture Decision Records (
 <!-- SPDX-FileCopyrightText: 2026 Rillan AI LLC -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-<!-- version: 3.0.0 -->
+<!-- version: 3.1.0 -->
 # ADR Mode
 
 ## Purpose
@@ -48,6 +48,15 @@ An ADR is warranted when the decision:
 - would surprise a future reader who did not see the discussion
 
 A decision that can be cleanly changed in a later PR usually does not need an ADR.
+
+## Synthesis-First Gate
+Before you record the decision, prove you actually made one. An ADR is the place a buried decision does the most damage — it freezes a choice into the record without ever exposing the fork. The gate forces the alternatives to be real before they are written down as "considered."
+
+1. **Draft, unassisted.** State the decision you would make and the single strongest alternative to it, in your own words, before filling the template.
+2. **Red-team it.** Name the strongest case *for the alternative*, the assumption your chosen option depends on, and what would have to be true for the alternative to win.
+3. **Surface the forks, don't bury them.** `## Considered Options` must carry at least two options that were genuinely in contention, weighed on the decision drivers — not the chosen option flanked by strawmen. If the decision is still open, say so and take it to the decider rather than recording a fait accompli.
+
+For the full protocol — the gate, the Decision Ledger, and the Depth Audit that flags generic patterns and one-real-option-plus-strawmen — load the `socratic` skill alongside this one.
 
 ## Directory And Naming Discovery
 Before writing, determine the repository's ADR conventions:
