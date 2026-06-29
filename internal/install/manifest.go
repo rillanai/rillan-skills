@@ -45,6 +45,23 @@ func ManifestPath(root string) string {
 	return filepath.Join(root, manifestRelPath)
 }
 
+// NearestProjectRoot walks up from start looking for a project install (a
+// .rillan-skills/manifest.json). It returns the first directory that has one
+// and true, or ("", false) when none is found before the filesystem root.
+func NearestProjectRoot(start string) (string, bool) {
+	dir := start
+	for {
+		if fi, err := os.Stat(ManifestPath(dir)); err == nil && !fi.IsDir() {
+			return dir, true
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", false
+		}
+		dir = parent
+	}
+}
+
 // LoadManifest reads the manifest at root, returning an empty (non-nil)
 // manifest when none exists yet.
 func LoadManifest(root string) (*Manifest, error) {
