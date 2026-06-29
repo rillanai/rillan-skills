@@ -33,6 +33,7 @@ func Packs() []string {
 		"rfc",
 		"rust",
 		"security",
+		"socratic",
 		"terraform",
 		// hcp-terraform is an overlay on the base terraform pack; keep it
 		// directly after terraform so list/install output reflects load order.

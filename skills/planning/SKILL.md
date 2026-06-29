@@ -6,7 +6,7 @@ description: Use to break an ambiguous request, vague goal, or large change into
 <!-- SPDX-FileCopyrightText: 2026 Rillan AI LLC -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-<!-- version: 3.0.0 -->
+<!-- version: 3.1.0 -->
 # Task Decomposition Mode
 
 ## Purpose
@@ -43,6 +43,15 @@ Do not use this skill for:
 
 ## Core Principle
 Decomposition is not a substitute for understanding. Do the reading before the planning.
+
+## Synthesis-First Gate
+Before you decompose — before the first milestone, before any clarifying question — form and attack your own position. This is a thinking guardrail, not paperwork: it keeps the real decisions in front of the user instead of buried in the plan.
+
+1. **Draft, unassisted.** Write a one-paragraph core plan in your own words — the shape of the approach and why, committed, not a menu of three.
+2. **Red-team it.** Name the strongest objection, the one assumption that would sink the plan if wrong, and what you must verify first.
+3. **Surface the forks, don't bury them.** Every consequential decision (boundary, sequencing, framework, rollout) goes to the user as a weighted choice — options, the axis you weigh on, your recommendation, and reversibility — *before* it is baked into a milestone. A decision the user can only find by reading the finished plan was buried, not made. Push it into a clarifying question when it is consequential, would change the plan, and can't be settled from evidence; otherwise decide and record it visibly.
+
+For the full protocol — the gate, the Decision Ledger, and the Depth Audit that flags generic patterns and skipped alternatives — load the `socratic` skill alongside this one.
 
 ## When To Stop And Ask
 Stop and ask the user rather than guess when:

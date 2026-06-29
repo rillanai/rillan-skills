@@ -6,7 +6,7 @@ description: Helm chart work — author or review charts, templates, `values.yam
 <!-- SPDX-FileCopyrightText: 2026 Rillan AI LLC -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-<!-- version: 3.1.0 -->
+<!-- version: 3.2.0 -->
 # Helm
 
 Root skill for Helm work. This `SKILL.md` is the only file loaded up front; it routes to

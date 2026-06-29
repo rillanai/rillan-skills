@@ -1,7 +1,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Rillan AI LLC -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-<!-- version: 3.0.0 -->
+<!-- version: 3.2.0 -->
 # CI/CD Core Principles
 
 ## Purpose
@@ -163,3 +163,11 @@ Stages: static checks, unit, build, integration, security scans, publish.
 Pin runner and toolchain via go.mod. Use OIDC for the registry. Publish SBOM and cosign signature.
 Deployment is out of scope for this pipeline — the image is consumed by a separate GitOps repo.
 ```
+
+## Pipeline Design Is Architecture: Full Socratic Intent
+Pipeline *design* is architecture; pipeline *review* produces recommendations. Scale the rigor to which one you are doing:
+
+- **Designing or restructuring a pipeline** — stage topology, a new deploy boundary, a credential or trust model, a promotion flow — gets the **full** `socratic` protocol: the **Synthesis-First Gate** (commit to your own design and red-team it first), the **Decision Ledger** (surface each consequential fork — OIDC vs. stored creds, gate placement, monorepo vs. per-service, blocking vs. async deploy — as a weighted choice the user decides), and the **Depth Audit**.
+- **Reviewing an existing pipeline** gets the **Depth Audit** on each recommendation; escalate to the full protocol the moment a fix is itself architectural.
+
+A recommendation FLAGs when it could be pasted into a different repo unchanged, reaches for a reflex default without tying it to the evidence, leans on buzzwords in place of a mechanism, or offers no alternative and no "do nothing" cost. Fix the FLAG by anchoring to the evidence, or surface it as an open question.

@@ -6,7 +6,7 @@ description: Go engineering — implement, review, refactor, debug, test, docume
 <!-- SPDX-FileCopyrightText: 2026 Rillan AI LLC -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-<!-- version: 3.1.0 -->
+<!-- version: 3.2.0 -->
 # Go
 
 Root skill for Go work. This `SKILL.md` is the only file loaded up front; it routes to
