@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.0](https://github.com/rillanai/rillan-skills/compare/v1.1.0...v1.2.0) (2026-06-30)
+
+
+### Features
+
+* **cli:** add self-upgrade and skills-update commands ([a0199f1](https://github.com/rillanai/rillan-skills/commit/a0199f1ab711cbc397c83e14881a59e7d32637b0))
+* **cli:** add self-upgrade and skills-update commands with y/N prompts ([5d2bbd5](https://github.com/rillanai/rillan-skills/commit/5d2bbd53243448e95eee4b380d1c6b8a551cb114))
+* **socratic:** add thinking-guardrails skill and wire depth gates across skills ([4771b54](https://github.com/rillanai/rillan-skills/commit/4771b54ebf592d41c961f7c3f25bd813cdbb1695))
+* **socratic:** add thinking-guardrails skill and wire depth gates across skills ([dea964b](https://github.com/rillanai/rillan-skills/commit/dea964b46289939e2ddb6b11206d00dcb68a6a51))
+* **socratic:** make gating depth tunable per risk with memory persistence ([593f5f1](https://github.com/rillanai/rillan-skills/commit/593f5f11e922387e9ae811fd7c6397590bf19b21))
+* **socratic:** make gating depth tunable per risk with memory persistence ([e78ff38](https://github.com/rillanai/rillan-skills/commit/e78ff3838dfbfe5c49ce77deb0fd21ea785c6828))
+
 ## [1.1.0](https://github.com/rillanai/rillan-skills/compare/v1.0.0...v1.1.0) (2026-06-26)
 
 
