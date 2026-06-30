@@ -83,6 +83,18 @@ task build
 ./bin/rillan-skills --help
 ```
 
+#### With `go install`
+
+If you have Go installed:
+
+```bash
+go install github.com/rillanai/rillan-skills/cmd/rillan-skills@latest
+```
+
+Binaries built this way report their version as `dev`, so `rillan-skills upgrade`
+defers to `go install` rather than self-replacing; use the release archives if you
+want in-place `upgrade`.
+
 ### Install skills into a project
 
 The installer detects which language and platform packs are relevant to a target repository, then writes skills into that repo's tool-specific directory:
@@ -176,6 +188,35 @@ rillan-skills uninstall --target . --tool codex --dry-run
 rillan-skills uninstall --global --tool all --dry-run
 ```
 
+### Update skills and upgrade the binary
+
+Two separate commands keep things current — one for the skills, one for the binary:
+
+```bash
+# Refresh installed skills to this binary's bundled versions. With no flags it
+# finds the nearest install: it walks up from the current directory for a project
+# install (.rillan-skills/manifest.json) and falls back to the global install.
+rillan-skills update
+
+# Refresh the global (user-level) install explicitly
+rillan-skills update --global
+
+# Self-update the binary itself to the latest GitHub release
+rillan-skills upgrade
+
+# Just check whether a newer release exists (no changes)
+rillan-skills upgrade --check
+```
+
+`update` refreshes exactly the tool/pack set the manifest recorded for that scope,
+reusing the same version logic as `install` (up-to-date packs are skipped; `--force`
+rewrites them). `upgrade` downloads the release archive for your OS/arch, verifies its
+SHA-256 against the release `checksums.txt`, extracts the binary, and atomically
+replaces the running executable — falling back to a manual-download hint if it can't
+write in place (e.g. a root-owned path). **Both prompt `y/N` before changing anything**
+unless you pass `--yes`/`-y` (or `--dry-run`, which only previews). After `upgrade`,
+run `update` (or `update --global`) to refresh skills to the new bundled versions.
+
 ### Architecture: one root skill per concern
 
 Each pack installs as a **single root skill** (`SKILL.md`) whose frontmatter is the only
@@ -196,6 +237,69 @@ the always-loaded set, not the ~20 it would take to register every mode as its o
 Claude Code and Codex support bundled, progressively-disclosed files, so they get the
 real router + mode-file directory. OpenCode uses single-file agents, so the installer
 assembles one self-contained agent per pack with every mode inlined.
+
+## For AI coding agents
+
+This installer is built to be driven by an AI coding agent (Claude Code, Codex,
+OpenCode, Grok, …). If you are such an agent installing these skills for a user, follow
+this flow.
+
+### 1. Get the binary
+
+Prefer a `rillan-skills` already on `PATH` (`rillan-skills version`). If it is missing,
+install it (see [Install the binary](#install-the-binary)):
+
+- If the user has Go: `go install github.com/rillanai/rillan-skills/cmd/rillan-skills@latest`.
+- Otherwise download the release archive for the user's OS/arch from the
+  [latest release](https://github.com/rillanai/rillan-skills/releases/latest), verify it
+  against `checksums.txt`, and place `rillan-skills` on `PATH`.
+
+If a release-built `rillan-skills` is already present, offer to self-update it first:
+`rillan-skills upgrade --check`, then `rillan-skills upgrade --yes` once the user agrees.
+
+### 2. Ask the user: global or per-project
+
+**Do not assume the scope — ask.** This is the one decision the user should make:
+
+- **Global (user-level):** skills available in every project, written under each tool's
+  home config dir (`~/.claude/skills/`, `~/.codex/skills/`, `~/.config/opencode/agent/`).
+  Best as the user's personal default toolbox.
+- **Per-project:** skills written into the current repo (`.claude/`, `.codex/`,
+  `.opencode/`), versioned or git-ignored with the project. Best when a team should share
+  a pinned set, or to avoid touching global config.
+
+Also confirm **which tools** to target (default `claude`; `--tool all` covers claude,
+codex, opencode, and reports grok as a manual copy).
+
+### 3. Install
+
+You have already gotten the user's consent in step 2, so run with `--yes` to skip the
+binary's own confirmation prompt. Offer a `--dry-run` first if the user wants a preview:
+
+```bash
+# Global, all tools (user chose "global")
+rillan-skills install --global --tool all --yes
+
+# Per-project, Claude only (user chose "this repo")
+rillan-skills install --target . --tool claude --yes
+
+# Preview first
+rillan-skills install --global --tool all --dry-run
+```
+
+The installer auto-detects relevant packs for a project; `--global` installs all packs.
+Narrow with `--packs go,security` if the user wants a subset.
+
+### 4. Keep it current
+
+- `rillan-skills update --yes` refreshes the nearest install's skills to the binary's
+  bundled versions; add `--global` for the user-level set.
+- `rillan-skills upgrade --yes` self-updates the binary to the latest release.
+
+`update` and `upgrade` both prompt `y/N` interactively and **refuse to prompt on a
+non-interactive stdin** — so as an agent you must pass `--yes` to proceed. Only ever pass
+`--yes` after you have actually asked the user; it is your confirmation standing in for
+theirs, not a way to skip the decision.
 
 ## Using Skills
 

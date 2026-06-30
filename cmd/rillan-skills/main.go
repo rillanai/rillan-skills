@@ -7,18 +7,24 @@
 package main
 
 import (
+	"bufio"
+	"context"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	rillanskills "github.com/rillanai/rillan-skills"
 	"github.com/rillanai/rillan-skills/internal/detect"
 	"github.com/rillanai/rillan-skills/internal/install"
+	"github.com/rillanai/rillan-skills/internal/selfupdate"
 )
 
 // version is the build version, overridden at release time via
@@ -35,6 +41,8 @@ Commands:
   detect      Print which skill packs would be installed (filesystem scan only)
   list        List all skills bundled in this binary
   uninstall   Remove installed skill files from a target repository
+  update      Refresh installed skills (nearest project, or --global) to this binary's version
+  upgrade     Replace this binary with the latest release from GitHub
   version     Print the rillan-skills version
 
 Common flags:
@@ -51,6 +59,9 @@ Examples:
   rillan-skills install --global --tool claude
   rillan-skills install --global --tool all --dry-run
   rillan-skills detect --target ../some-repo
+  rillan-skills update                  # refresh skills in the nearest install
+  rillan-skills update --global --yes   # refresh global skills without prompting
+  rillan-skills upgrade                 # replace this binary with the latest release
 `
 
 func main() {
@@ -70,6 +81,10 @@ func main() {
 		err = runList(args)
 	case "uninstall":
 		err = runUninstall(args)
+	case "update":
+		err = runUpdate(args)
+	case "upgrade":
+		err = runUpgrade(args)
 	case "version", "--version", "-v":
 		fmt.Printf("rillan-skills %s\n", version)
 		return
@@ -299,4 +314,229 @@ func printPackList(packs []string, reasons map[string]string) {
 		fmt.Printf("  %-12s — %s\n", p, why)
 	}
 	fmt.Println()
+}
+
+// runUpdate refreshes the skills recorded in an existing install — the nearest
+// project (walking up from --target) or the user-level global install — to the
+// versions bundled in this binary. It prompts before writing unless --yes.
+func runUpdate(args []string) error {
+	fs := flag.NewFlagSet("update", flag.ContinueOnError)
+	target := fs.String("target", ".", "Project directory to search upward from for an install")
+	global := fs.Bool("global", false, "Refresh the user-level (global) install instead of the nearest project")
+	dryRun := fs.Bool("dry-run", false, "Show what would change without writing files")
+	force := fs.Bool("force", false, "Rewrite skills even when the installed version is unchanged")
+	var yes bool
+	fs.BoolVar(&yes, "yes", false, "Skip the confirmation prompt")
+	fs.BoolVar(&yes, "y", false, "Alias for --yes")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	absTarget, err := filepath.Abs(*target)
+	if err != nil {
+		return err
+	}
+
+	// Resolve which install to refresh: --global forces the user-level scope;
+	// otherwise use the nearest project install, falling back to global.
+	var root string
+	isGlobal := *global
+	switch {
+	case isGlobal:
+		home, herr := os.UserHomeDir()
+		if herr != nil {
+			return fmt.Errorf("resolve home directory: %w", herr)
+		}
+		root = home
+	default:
+		if pr, ok := install.NearestProjectRoot(absTarget); ok {
+			root = pr
+		} else {
+			home, herr := os.UserHomeDir()
+			if herr != nil {
+				return fmt.Errorf("no project install found and cannot resolve home directory: %w", herr)
+			}
+			root, isGlobal = home, true
+			fmt.Println("rillan-skills: no project install found nearby; targeting the global install")
+		}
+	}
+
+	man, err := install.LoadManifest(root)
+	if err != nil {
+		return err
+	}
+	order, byTool := manifestByTool(man)
+
+	scope := root
+	if isGlobal {
+		scope = "user-level config (global)"
+	}
+	if len(order) == 0 {
+		fmt.Printf("rillan-skills: no installed skills recorded for %s; run `rillan-skills install` first\n", scope)
+		return nil
+	}
+
+	fmt.Printf("rillan-skills %s — refresh installed skills at %s:\n", version, scope)
+	for _, tool := range order {
+		fmt.Printf("  %-9s %s\n", tool, strings.Join(byTool[tool], ", "))
+	}
+	ok, err := confirm("Update these skills now?", yes || *dryRun)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		fmt.Println("aborted.")
+		return nil
+	}
+
+	opts := install.Options{
+		DryRun: *dryRun,
+		Force:  *force,
+		Logger: func(format string, a ...any) { fmt.Printf(format+"\n", a...) },
+	}
+	if isGlobal {
+		opts.Global = true
+		opts.Home = root
+	} else {
+		opts.Target = root
+	}
+
+	total := 0
+	for _, tool := range order {
+		opts.Tools = []install.Tool{install.Tool(tool)}
+		opts.Packs = byTool[tool]
+		n, rerr := install.Run(rillanskills.Skills, opts)
+		if rerr != nil {
+			return rerr
+		}
+		total += n
+	}
+	verb := "updated"
+	if *dryRun {
+		verb = "would update"
+	}
+	fmt.Printf("\nrillan-skills: %s %d skill pack(s) at %s\n", verb, total, scope)
+	return nil
+}
+
+// manifestByTool groups a manifest's recorded packs by tool, preserving
+// first-seen order so the refresh touches exactly what was installed.
+func manifestByTool(m *install.Manifest) (order []string, byTool map[string][]string) {
+	byTool = map[string][]string{}
+	seen := map[string]map[string]bool{}
+	for _, e := range m.Entries {
+		if _, ok := byTool[e.Tool]; !ok {
+			order = append(order, e.Tool)
+			seen[e.Tool] = map[string]bool{}
+		}
+		if !seen[e.Tool][e.Pack] {
+			seen[e.Tool][e.Pack] = true
+			byTool[e.Tool] = append(byTool[e.Tool], e.Pack)
+		}
+	}
+	return order, byTool
+}
+
+// runUpgrade replaces the running binary with the latest GitHub release for
+// this platform. It verifies the release checksum before swapping and prompts
+// before replacing unless --yes.
+func runUpgrade(args []string) error {
+	fs := flag.NewFlagSet("upgrade", flag.ContinueOnError)
+	check := fs.Bool("check", false, "Only report whether a newer release is available")
+	force := fs.Bool("force", false, "Upgrade even when already on the latest version (or a dev build)")
+	dryRun := fs.Bool("dry-run", false, "Show what would happen without replacing the binary")
+	var yes bool
+	fs.BoolVar(&yes, "yes", false, "Skip the confirmation prompt")
+	fs.BoolVar(&yes, "y", false, "Alias for --yes")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	if version == "dev" && !*force {
+		fmt.Println(`rillan-skills: this is a local dev build (version "dev"); upgrade targets released binaries.`)
+		fmt.Println("Install a release from https://github.com/rillanai/rillan-skills/releases, or pass --force to upgrade anyway.")
+		return nil
+	}
+
+	opts := selfupdate.Options{
+		CurrentVersion: version,
+		GOOS:           runtime.GOOS,
+		GOARCH:         runtime.GOARCH,
+		Token:          os.Getenv("GITHUB_TOKEN"),
+		Logger:         func(format string, a ...any) { fmt.Printf(format+"\n", a...) },
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	st, rel, err := selfupdate.Check(ctx, opts)
+	if err != nil {
+		return err
+	}
+	if !st.Newer && !*force {
+		fmt.Printf("rillan-skills: already up to date (v%s)\n", st.Current)
+		return nil
+	}
+	if *check {
+		fmt.Printf("rillan-skills: update available %s -> %s (run `rillan-skills upgrade` to install)\n", st.Current, st.Latest)
+		return nil
+	}
+	if *dryRun {
+		fmt.Printf("rillan-skills: would upgrade %s -> %s\n", st.Current, st.Latest)
+		return nil
+	}
+
+	ok, err := confirm(fmt.Sprintf("Upgrade rillan-skills %s -> %s?", st.Current, st.Latest), yes)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		fmt.Println("aborted.")
+		return nil
+	}
+
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("locate current executable: %w", err)
+	}
+	if resolved, rerr := filepath.EvalSymlinks(exe); rerr == nil {
+		exe = resolved
+	}
+	if err := selfupdate.Apply(ctx, opts, rel, exe); err != nil {
+		fmt.Fprintln(os.Stderr, "rillan-skills: could not replace the binary in place (insufficient permissions or a read-only path).")
+		fmt.Fprintln(os.Stderr, "Download the latest release manually: https://github.com/rillanai/rillan-skills/releases/latest")
+		return err
+	}
+	fmt.Printf("rillan-skills: upgraded %s -> %s\n", st.Current, st.Latest)
+	fmt.Println("Run `rillan-skills update` (or `update --global`) to refresh installed skills to the new version.")
+	return nil
+}
+
+// confirm asks a yes/no question. It returns true on an affirmative answer, or
+// immediately when assumeYes is set. On a non-interactive stdin (no TTY) without
+// assumeYes it returns an error so automation must opt in explicitly via --yes.
+func confirm(question string, assumeYes bool) (bool, error) {
+	if assumeYes {
+		return true, nil
+	}
+	if !stdinIsTerminal() {
+		return false, fmt.Errorf("refusing to prompt on a non-interactive stdin; re-run with --yes to proceed")
+	}
+	fmt.Printf("%s [y/N] ", question)
+	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	if err != nil && err != io.EOF {
+		return false, err
+	}
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "y", "yes":
+		return true, nil
+	default:
+		return false, nil
+	}
+}
+
+func stdinIsTerminal() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
 }
