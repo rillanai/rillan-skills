@@ -6,7 +6,7 @@ description: Use to author, review, or revise Request for Comments (RFC) documen
 <!-- SPDX-FileCopyrightText: 2026 Rillan AI LLC -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-<!-- version: 3.1.0 -->
+<!-- version: 3.3.0 -->
 # RFC Mode
 
 ## Purpose
@@ -60,14 +60,10 @@ The invoking prompt should provide:
 
 If the problem statement is vague ("we should improve X"), stop and ask for specifics. Vague RFCs produce vague discussions.
 
-## Synthesis-First Gate
-Before you fill the template — before any clarifying question — commit to your own proposal and attack it. An RFC written straight into the template tends to launder a half-formed idea into an official-looking document; the gate forces the thinking the template assumes you already did.
+## Decision Rigor And Socratic Integration
+Standalone minimum: ground the proposal in evidence, compare alternatives including doing nothing, state costs and reversibility, and keep consequential unresolved choices in **Open Questions**. Reuse settled decisions without reapproval.
 
-1. **Draft, unassisted.** Write your real one-paragraph proposal — what you would actually do and why — before you touch the Alternatives or Impact sections.
-2. **Red-team it.** Name the strongest objection a reviewer will raise, the load-bearing assumption that would sink it, and what you must verify.
-3. **Surface the forks, don't bury them.** The genuine decisions belong in `## Alternatives Considered` as real options weighed on stated criteria — not one option plus strawmen. When a fork is consequential and you can't settle it from evidence, raise it as an open question for the reviewers rather than quietly choosing.
-
-For the full protocol — the gate, the Decision Ledger, and the Depth Audit that flags generic patterns and one-real-option-plus-strawmen — load the `socratic` skill alongside this one.
+Skip the overlay when `off` is selected. Otherwise, for useful or requested structured challenge, use `socratic/SKILL.md` if available at its selected level. Allow factual clarification. Put compact synthesis in **Summary** or **Proposal**, decisions in **Alternatives Considered**, and audit verdict in review findings or **Open Questions**; follow that skill for deeper checks and unresolved flags.
 
 ## RFC Lifecycle
 Status values, in order. Every RFC should record its current status at the top.
