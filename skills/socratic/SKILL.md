@@ -1,225 +1,105 @@
 ---
 name: socratic
-description: Adversarial thinking-guardrails layer that keeps the human in the loop as the decider and stops the model from coasting on generic patterns. Load alongside planning, rfc, adr, or any audit/review whenever a request involves a real proposal, design, or consequential decision. Forces a synthesis-first gate (draft and critique your own position before asking), decision surfacing (expose the real forks as weighted choices instead of silently picking), and a depth audit (flag generic patterns and skipped alternatives). Invoke directly when you want a coach that enforces depth rather than an autopilot that buries the reasoning in a process log. Gating depth is tunable per context and risk (off / light / standard / deep) and the chosen level can persist across sessions via the host's memory.
+description: Apply human-in-the-loop Socratic checks to proposals and consequential decisions. Use alone or with planning, RFC, ADR, or review work to challenge reasoning and assumptions, select off/light/standard/deep depth, surface material choices, and report a concise reasoning-audit verdict.
 ---
 
 <!-- SPDX-FileCopyrightText: 2026 Rillan AI LLC -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-<!-- version: 1.0.0 -->
+<!-- version: 1.1.0 -->
 # Socratic Mode
 
 ## Purpose
-Use this skill as a thinking-guardrails layer over design, proposal, and decision work. It is not a document format and it does not produce an artifact of its own — it changes *how* the model arrives at one.
 
-The goal is not to let the model work unassisted. The goal is the opposite: to keep the human's judgment in the loop and exercised. A model that answers "I'll do X" and runs with it buries the decision and its weighting in a process log — the human never got to weigh the fork, and the reasoning muscle that should have been exercised atrophies. This skill makes the model behave like a sparring partner and coach: it forms a real position, exposes the genuine decisions for the human to make, and adversarially attacks generic, low-effort thinking — its own and the human's.
+Use this skill to strengthen judgment in proposals, designs, plans, reviews, and other consequential reasoning. Act as a sparring partner: form a position, challenge it, and expose choices that need human judgment. Do not silently turn required checks into internal reasoning; at the selected level, show the required synthesis, consequential decisions, and audit verdict so the human can assess and override them.
 
-Three protocols:
-1. **Synthesis-First Gate** — form and attack your own position *before* you ask questions or emit output.
-2. **Decision Surfacing** — expose every consequential fork as an explicit, weighted choice for the human, instead of silently picking and explaining in passing.
-3. **Depth Audit** — before finalizing, run a concrete check that flags generic patterns and skipped alternatives, and block on the flags.
+This skill governs reasoning discipline, not artifact shape. It can guide a standalone answer or compose with a host skill such as planning, RFC, ADR, review, or audit. Preserve the host's format, evidence rules, and phase boundaries. Put Socratic content into the host's existing rationale, alternatives, decisions, risks, or review sections where possible instead of adding duplicate tables or process logs.
 
-How many of these run, and how hard, is set by the **gating level** (see below) — tuned to the work's risk so routine chunks stay light and architecture or standards work gets the full probe.
+The three protocols are:
 
-## Skill Use
-- Load this skill alongside `planning`, `rfc`, `adr`, a `*-audit` mode, `security`, or `cicd` whenever the task involves a proposal, a design, or a consequential decision.
-- It is also valid to invoke this skill on its own when you want the protocols applied to free-form reasoning that no other skill governs.
-- Run the protocols at the resolved gating level (see Gating Level below). Dropping a gate that the level calls for is a failure you must name and justify; running the full deep probe on mechanical work is the opposite failure.
-- This skill governs *thinking discipline*. The host skill (planning, rfc, adr, audit) still governs the artifact's shape.
+1. **Synthesis-First Gate** — take and challenge a position before asking the human to choose.
+2. **Decision Surfacing/Ledger** — make consequential choices and their weighting visible.
+3. **Depth Audit** — test the result for grounded, non-generic reasoning before finalizing it.
 
-## Tool Use
-This skill is tool-agnostic and works with Claude Code, Codex, OpenCode, and similar assistants. Map its guidance to whatever file-reading, editing, search, and shell-execution tools your environment exposes.
+## Select the Gating Level
 
-- The Synthesis-First Gate is *time-boxed thinking*, not research paralysis. Read enough to form a real position, then commit to it on the page before you open it for challenge.
-- Ground the position in evidence the same way the host skill demands: name files, incidents, metrics, constraints — not memory.
-- When you surface a decision, the options you present must be ones you actually evaluated, not a menu generated to look thorough.
-- Gating preferences live in the host's durable memory (CLAUDE.md, AGENTS.md, a memory file, or the host's memory feature). Use that surface to recall and — on confirmation — persist them; see Gating Level → Memory integration.
+Resolve the level in this order; the first applicable source wins:
 
-## When To Use
-Use this skill when:
-- the request is open-ended enough that a reasonable person could go several ways ("how should we structure X", "what's the right approach to Y")
-- the work will produce a proposal, plan, design, ADR, RFC, or audit recommendation
-- the model is tempted to jump straight to a confident answer or straight to a menu of options
-- a consequential, hard-to-reverse decision is embedded in the task
+1. An explicit prompt selector, such as `socratic: deep` or "use light gating."
+2. An applicable stored preference whose scope covers this task.
+3. A repository or installation default.
+4. The risk of the current work.
 
-Do not over-apply this skill to:
-- mechanical or single-answer tasks where there is no real fork (formatting, a known bug fix, a lookup) — these resolve to `off` or `light`
-- exploratory spikes explicitly framed as throwaway
-- cases where the human has already made the decision and asked only for execution — record the decision, do not re-litigate it
+Honor decisions the user has already made within their stated scope. A level controls how unresolved reasoning is handled; it does not reopen settled choices. State the resolved level and a short reason when the level is not `off`, or when the user explicitly selected it.
 
-If you are unsure whether a task warrants the gates, run the Synthesis-First Gate anyway; it is cheap and it surfaces whether there is a real decision hiding inside.
+| Level | Required behavior | Typical fit |
+|---|---|---|
+| `off` | Run no Socratic protocols. | Mechanical, deterministic work with no meaningful fork. |
+| `light` | Run the Depth Audit on applicable quality checks. Do not invent alternatives for deterministic work. | Localized, low-consequence work with a clear precedent. |
+| `standard` | Run Synthesis-First and the Depth Audit; record consequential decisions and decide those settled by evidence or cheap to reverse. | A contained, reversible design choice or normal feature proposal. |
+| `deep` | Run all three protocols; ask about consequential unresolved choices only when the answer can materially change the result. | Hard-to-reverse boundaries, standards, public contracts, security posture, or cross-team decisions. |
 
-## Core Principle
-The model's job is to make the human think better, not to think *instead of* the human. Surface the fork; do not bury it.
+Choose by consequence: reversibility, blast radius, affected people, uncertainty, and cost of a wrong choice. A new method or dependency is not automatically `deep`; use `deep` when its consequences warrant it. If scope or evidence changes the risk, revise the level and say why.
 
-## Gating Level (tunable depth)
-The protocols are not all-or-nothing. Their depth is **tunable per context and risk** so routine chunks stay light and architecture or standards work gets the full probe — depth where friction earns its keep, and none where it does not.
+An explicit `off` disables Socratic protocols even when a host integration usually requests the full probe. Continue to satisfy the host skill's own requirements. Never silently promote `off` or another explicit level.
 
-### Levels
-| Level | Runs | Use for |
-|-------|------|---------|
-| `off` | nothing | mechanical, single-answer work — formatting, a rename, a known one-line fix |
-| `light` | Depth Audit only | localized changes with a clear precedent; small fixes whose risk is obvious |
-| `standard` | Synthesis-First Gate + Depth Audit; record the Decision Ledger | normal feature work; a contained, reversible design choice |
-| `deep` | the full probe — gate + **interactive** Decision Surfacing + Depth Audit | architecture, standards, public contracts, irreversible or cross-team decisions |
+## Protocol 1: Synthesis-First Gate
 
-The gap between `standard` and `deep` is mostly Decision Surfacing: `standard` records the forks in the ledger and decides the routine ones; `deep` pushes each consequential fork to the human as a question before committing.
+At `standard` and `deep`, form a defensible position before asking preference or decision questions:
 
-### Resolving the level
-Resolve in this order; the first that applies wins:
-1. **Explicit selector in the prompt** — `socratic: deep`, "use light gating", "full Socratic probe on this". Always wins; state it back.
-2. **A preference recalled from memory** — see Memory integration below.
-3. **A repo/install default** — a `socratic` gating line in the project's memory or config (e.g. CLAUDE.md / AGENTS.md), or a `default-gating:` note carried with the skill.
-4. **The risk auto-rubric** — when nothing above is set, infer the level from the work. This is the default.
+- State the approach you recommend and why, grounded in the available facts and constraints.
+- Give the strongest objection, not a token drawback.
+- Identify the load-bearing assumption or evidence gap.
+- Keep, revise, or replace the position after the challenge.
 
-### Risk auto-rubric (the default)
-Classify the chunk in front of you and pick the **lightest level that still covers its risk**:
-- **→ `deep`** when it introduces or changes a boundary, public API, data model, protocol, dependency, or security posture; sets a standard others will follow; is hard to reverse; or crosses teams. When torn between `standard` and `deep` on something hard to reverse, choose `deep`.
-- **→ `standard`** for a contained design choice or feature with a real but reversible decision in it.
-- **→ `light`** for a localized change with an existing pattern to copy and obvious, low-blast-radius risk.
-- **→ `off`** when there is no decision and no design — pure mechanics.
+If a missing fact prevents any defensible position, ask for that factual input first. Do not invent a position merely to claim the gate ran. After receiving the fact, complete the gate before asking the human to choose among approaches.
 
-Judge by novelty and blast radius, not size: a ten-line change that adds a dependency or a public method is `deep`; a hundred-line change that follows an established pattern is `light`.
+Make the result visible but concise: recommendation, evidence or rationale, strongest objection, falsifier or needed verification, and verdict. Do not expose exhaustive internal reasoning. In a host artifact, place these elements in its existing recommendation and rationale sections. Expand only when the user asks or the decision needs more detail to be understood.
 
-### Memory integration
-The point of memory is calibration that sticks, so the human does not re-specify their preference every session.
-- **Recall (always).** At the start of relevant work, check the host's durable memory for a stored gating preference. If one exists, it sets the default level (resolution step 2) until an explicit selector overrides it.
-- **Notice and propose (proactive).** Watch for a repeated signal that the current default is miscalibrated — the human overrides toward lighter gating several times in the same repo, or keeps asking for a deeper probe on a class of work. When the pattern is clear, **propose** persisting it: "You've asked for lighter gating on routine edits here a few times — want me to save `light` as the default for this repo?"
-- **Write (only on confirmation).** Persist a preference only after the human agrees, or when they state a durable one outright ("always go deep on standards work"). Never write a gating preference silently or on a single inference. Store it small and scoped — the context it applies to and the level — so it is recalled next session and a future reader can see why it is there.
-- **Degrade gracefully.** If the host exposes no durable memory, skip recall and write, and fall back to the in-prompt selector and the auto-rubric. The skill still works; it just does not remember.
+## Protocol 2: Decision Surfacing/Ledger
 
-### Be transparent about the level
-State the active level and why, in one line, at the top of gated work — `Gating: deep (new public API, hard to reverse)` — so the human can override in a word. The level is itself a surfaced decision, not a buried one. If you changed level mid-task (a chunk turned out riskier than it looked), say so.
+A decision is consequential when it materially changes the result, is costly to reverse, forecloses credible alternatives, affects a public or team boundary, or depends on values that reasonable people could weigh differently.
 
----
+For each consequential unresolved decision, make visible:
 
-## Protocol 1 — The Synthesis-First Gate
-*Active at `standard` and `deep`.* Run this **before** interactive questioning begins and **before** emitting structured output.
+- the question and real options considered;
+- the criteria that distinguish them;
+- the recommendation and concise reason;
+- reversibility and the cost of changing later;
+- the human's decision, or an explicit unresolved status.
 
-1. **Draft, unassisted.** Write your own one-paragraph core position: the single approach you would take and *why*, in your own words. No option menu, no hedging across three choices, no restating the prompt back. This is the muscle being exercised — produce a defensible answer, not a survey.
-2. **Red-team your own draft.** Immediately attack it:
-   - State the **strongest objection** a sharp reviewer would raise.
-   - Name the **one assumption** that, if wrong, sinks the position.
-   - Name what you **must verify** before trusting it, and verify what you can with tools now.
-3. **Decide what survives.** Keep the position, revise it, or replace it — and say which. A position that survived a real attack is worth far more than one that was never tested.
-4. **Then, and only then, open questioning** (Protocol 2).
+At `standard`, decide choices that clear evidence settles or that are cheap to reverse, and record the consequential ones in the host artifact's decision or rationale section. Ask when a material choice cannot be settled responsibly.
 
-Make the gate visible. A short block like this belongs in the output before the questions or the artifact:
+At `deep`, ask the human only when all are true: the choice is consequential, remains unresolved after investigation, and their answer would materially change the result. Present a recommendation with the question rather than offloading analysis. Do not ask about trivia, fabricate a menu, or relitigate an applicable decision already made by the user. A compact ledger is sufficient when no host section exists; prose is acceptable when clearer.
 
-```markdown
-### Synthesis-First (pre-work)
-- **My position:** <one paragraph, committed>
-- **Strongest objection:** <the real one, not a soft one>
-- **Load-bearing assumption:** <the one that would sink it if false>
-- **Must verify:** <facts to confirm before trusting this>
-- **Verdict:** kept / revised / replaced — <why>
-```
+If a needed decision remains unanswered, mark it visibly and block only the affected recommendation or implementation. Continue independent work that does not depend on it.
 
-Mirror the gate to the human when collaborating: "Here's my draft position and the weak point I found in it — where do you land?" The point is to give the human a real thing to react to, not a blank prompt or a pre-baked conclusion.
+## Protocol 3: Depth Audit
 
-**Reject** as a gate failure: opening with "There are a few options…" before committing to one; restating the request as if it were analysis; a self-critique that attacks a strawman instead of the real weak point.
+At `light`, `standard`, and `deep`, check the applicable items before finalizing:
 
----
+- **Anchored:** claims use the available facts, files, constraints, incidents, or metrics.
+- **Mechanistic:** the reasoning explains how and why the proposal works here; labels and buzzwords do not substitute for a mechanism.
+- **Non-reflexive:** a familiar pattern is tied to an observed need rather than chosen by habit.
+- **Alternatives:** genuine alternatives, including staying with the status quo when relevant, were fairly considered.
+- **Costs:** downsides, inaction costs, and reversibility are stated where material.
+- **Falsifiable:** the evidence or condition that would make the recommendation wrong is named.
+- **Decision-visible:** consequential forks are surfaced at the level required above.
 
-## Protocol 2 — Decision Surfacing
-*Ledger at `standard`; interactive questioning at `deep`.* A decision is **consequential** when any of these hold: it is hard to reverse, it forecloses alternatives, it changes the output materially, or a reasonable person would weigh it differently than you did. Consequential decisions must be *surfaced*, not buried.
+Mark an inapplicable check `N/A` with a brief reason instead of inventing alternatives or evidence. Mark each applicable check `PASS` or `FLAG`, with a concise verdict integrated into the host's review or conclusion section when available.
 
-**Surfaced** means the human sees, at the moment of decision:
-- the **question** (the fork, stated plainly)
-- the **options** you actually considered (2+, real, not one plus strawmen)
-- the **axis** you are weighing on (the criteria that decide it)
-- your **recommendation and why**, tied to that axis
-- the **reversibility** (cheap to change later, or a one-way door)
+A `FLAG` is substantive. Fix the underlying reasoning and rerun the relevant check; changing the label or wording is insufficient. If a material flag cannot be cleared, show the missing evidence or unresolved decision, block the affected conclusion, and continue independent work. Do not present that conclusion as final or report the overall audit as `PASS`.
 
-**Buried** is the failure mode to kill: silently choosing X and letting the rationale live only in passing prose or a process log, so the human never weighed the fork and cannot reconstruct the weighting afterward. "I went with X" three sections deep is buried. A decision the human can only discover by reading the diff is buried.
+## Memory and Tool Boundaries
 
-Maintain a running **Decision Ledger** and present it:
+Use a gating preference already present in the host context or in the repository/configuration files normally read for the task. Do not broadly search the filesystem, install tools, or add setup work merely to discover a preference.
 
-```markdown
-### Decisions
-| # | Fork | Options | Weighed on | Recommendation | Reversibility |
-|---|------|---------|-----------|----------------|---------------|
-| 1 | <question> | A / B / C | <criteria> | <pick + why> | cheap / one-way |
-```
+Persist a preference only under existing explicit durable authorization or after confirmation. Honor reusable approval already given for the same scope; do not ask again. Never infer and silently write a preference from one interaction. Store only the level, its scope, and brief context in the host's established memory surface. If no durable memory exists, continue without creating one.
 
-**Ask vs. decide.** At `deep`, push consequential decisions into interactive questioning when *all* of: the decision is consequential, the human's answer would change the output, and you cannot settle it from clear evidence. At `standard`, record the same forks in the ledger and decide the reversible ones, asking only when a fork is both consequential and genuinely a toss-up. Routine, easily-reversible decisions get a ledger row, not a question. The bias is toward asking one good question over silently committing a one-way door.
+After repeated overrides reveal a stable pattern, offer to save a scoped preference without blocking the current work; wait for confirmation unless durable authorization already covers the write.
 
-**Prove it for the individual:** the human should be able to look at the decision, the alternatives, and the criteria *at the moment of choosing* and override — not reverse-engineer them later from what got built.
+Use tools only when they help establish facts or evidence required by the task. Socratic Mode does not create separate research, logging, or tooling obligations.
 
-**Reject:** "do X and run with it" on a consequential fork; a recommendation with no stated criteria; a question asked about something trivial that you should have just decided; a wall of five questions that offloads the thinking back onto the human without a recommendation attached to each.
+## Completion Standard
 
----
-
-## Protocol 3 — The Depth Audit
-*Active at `light`, `standard`, and `deep`.* Before finalizing any proposal, plan, design, ADR/RFC, or audit recommendation, run this check and **emit the verdict**. Each item is PASS or FLAG. Any FLAG blocks finalizing until it is fixed or escalated to the human — do not silently pass.
-
-```markdown
-### Depth Audit
-| Check | Verdict | Note |
-|-------|---------|------|
-| Anchored — names this repo's files/incidents/metrics/constraints, not just the domain | PASS/FLAG | |
-| Mechanism over label — explains *how/why it works here*, not a textbook definition | PASS/FLAG | |
-| Not a reflex default — "add a cache / queue / retry / microservice / abstraction" is tied to the actual bottleneck, not pattern-matched | PASS/FLAG | |
-| Real alternatives — 2+ genuine options, not one plus strawmen | PASS/FLAG | |
-| Do-nothing costed — the cost of the status quo is articulated | PASS/FLAG | |
-| Honest negatives — the recommendation states real costs, not only upside | PASS/FLAG | |
-| Falsifiable — "what would make this the wrong call?" is answered | PASS/FLAG | |
-| Decision visible — consequential forks are in the ledger, not buried | PASS/FLAG | |
-```
-
-**Generic-pattern tells** (any of these is a FLAG, not a stylistic nit):
-- The text could be pasted into a different repo unchanged and still "read fine." Specificity is the cure: a finding that doesn't cite *this* code isn't grounded.
-- Buzzword density — "scalable, robust, cloud-native, best-practice, idiomatic" doing the work that a mechanism should do.
-- A named default arrives without a bottleneck: a cache with no measured hot path, microservices with no coupling pain, a queue with no backpressure problem, an abstraction with no second caller.
-- The rationale is a definition of the pattern rather than reasoning about this situation.
-
-**Alternatives tells:**
-- Only one option was ever real; the others exist to be rejected.
-- "Do nothing" is missing, so the cost of inaction was never weighed.
-- No falsification — the proposal cannot be wrong, which means it was never tested.
-
-When a FLAG can't be cleared (e.g., the repo genuinely lacks the evidence to anchor a claim), say so explicitly and surface it as an open question rather than papering over it with confident generic prose.
-
----
-
-## How It Composes
-- **Gating level governs host gates too.** The inline gates in `planning`, `rfc`, `adr`, the Go/Rust/Python `workflow` novel-work gate, and the `*-audit` / `security` / `cicd` hooks all run at the resolved level. Those skills mostly fire in contexts the auto-rubric already scores `standard` or `deep` (planning is invoked for large/risky work; the novel-work gate triggers only on novel work; the audit hooks already split "architectural" from "localized"), so in practice they run in full — but an explicit selector or a recalled memory preference still overrides them.
-- With **`planning`**: run the Synthesis-First Gate before decomposition; every milestone-level fork (boundary, sequencing, framework) goes in the Decision Ledger; run the Depth Audit on the plan before handing off.
-- With **`rfc`** / **`adr`**: the gate produces the author's real position before the template is filled; Decision Surfacing maps onto the alternatives and decision-drivers sections; the Depth Audit is the self-review pass before review/acceptance.
-- With **`*-audit`**, **`security`**, **`cicd`**: findings stay evidence-driven, but a recommendation is a design act. Run the **full** protocol — gate, ledger, and Depth Audit — on architectural recommendations (modernization or refactor plans, new boundaries, pipeline design); the Depth Audit alone suffices for localized, evidence-obvious fixes. A remediation that pattern-matches ("add rate limiting", "split this service") without tying to the observed evidence is a generic-pattern FLAG.
-
-## Anti-Patterns To Reject
-- Opening with a menu of options before committing to a position
-- Restating the prompt as if it were analysis
-- Self-critique aimed at a strawman so the original survives untouched
-- Silently picking a consequential option and explaining it in passing prose
-- A recommendation with no stated weighting criteria
-- Asking the human to decide trivia, or dumping a question list with no recommendations attached
-- Proposals that could be pasted into any repo unchanged
-- Reflex defaults (cache/queue/microservice/abstraction) with no bottleneck behind them
-- One real alternative plus strawmen; missing "do nothing"
-- Treating the Depth Audit as a formality and passing every item without evidence
-- Running the full deep probe on mechanical work, or staying `light` on an irreversible decision — the level should track the risk
-- Writing a gating preference to memory without explicit confirmation, or ignoring a preference already stored there
-
-## Quality Checklist
-Before finalizing, verify:
-- the active gating level was resolved (selector → memory → repo default → auto-rubric) and stated in one line
-- a stored gating preference, if any, was recalled; nothing was written to memory without explicit confirmation
-- at `standard`/`deep`, the Synthesis-First block is present and the self-critique attacks the real weak point
-- consequential decisions appear in the Decision Ledger with options, criteria, and reversibility
-- at `deep`, the consequential, change-the-output, can't-settle-from-evidence forks were asked, not assumed
-- the Depth Audit verdict is emitted and every FLAG is fixed or escalated
-- no generic-pattern tells survive unflagged
-- the human can see and override each decision — and the level — at the point it was made
-
-## Invocation Template
-Use this skill alongside a host skill, or on its own. The optional `socratic: <level>` selector overrides the auto-rubric. Example:
-
-```text
-Use Socratic Mode alongside RFC Mode. socratic: deep
-Before drafting RFC-0051 on the auth-service split, run the Synthesis-First Gate: commit to your own recommended split and attack it.
-Surface every consequential boundary decision as a weighted choice for me to confirm — do not silently pick.
-Run the Depth Audit before you call the draft ready; show me the FLAGs.
-If I keep dialing this down on routine work, offer to remember a lighter default for this repo.
-```
+The work is ready when the resolved level was followed, prior user decisions remain honored, required visible rationale is specific enough to challenge, consequential unresolved choices are surfaced at the proper depth, and every material Depth Audit flag is fixed or clearly blocks the affected conclusion. At levels that run synthesis, the human should be able to see why the recommendation survived and what could disprove it; at levels that surface decisions, they should see where their judgment still matters. Do this without exposing a transcript of internal reasoning.

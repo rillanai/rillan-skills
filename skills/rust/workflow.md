@@ -1,7 +1,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Rillan AI LLC -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-<!-- version: 3.2.0 -->
+<!-- version: 3.3.0 -->
 # Rust Engineering Workflow
 
 ## Purpose
@@ -107,7 +107,7 @@ Novel work includes:
 For novel work, before implementation:
 1. Route to the `planning` skill to decompose the work into verifiable, reversible steps.
 2. If the task embeds a consequential, hard-to-reverse decision (framework, schema, protocol, boundary), record it with the `adr` skill — or, if it crosses teams or needs discussion first, the `rfc` skill — *before* coding, not after.
-3. Run the `socratic` synthesis gate: commit to your own design, attack it, and surface the real decisions to the user as weighted choices rather than picking silently mid-implementation.
+3. Skip the overlay when `off` is selected. Otherwise, when structured challenge is useful or requested, use `socratic/SKILL.md` if available and respect its selected level. Reuse settled decisions, permit factual clarification, and integrate its output into the plan, ADR, or RFC rather than adding a separate gate.
 
 This gate does **not** apply to routine work — a localized bug fix, a change with an existing pattern to follow, or a refactor under test coverage. Do not turn a one-line fix into a planning ceremony. The test is novelty and blast radius, not size: a ten-line change that introduces a new dependency or a new public interface is novel; a hundred-line change that follows an established pattern is not.
 
