@@ -1,202 +1,110 @@
 <!-- SPDX-FileCopyrightText: 2026 Rillan AI LLC -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-<!-- version: 3.2.0 -->
+<!-- version: 3.3.0 -->
 # Go Audit Mode
 
-## Purpose
-Use this skill to run a phased, evidence-based deep audit of a Go codebase.
+Use with `policy.md` and `workflow.md` only for an explicitly requested deep,
+phased Go audit. The task must name the repository path or scope and one exact
+phase below; ask for either if missing. Repository instructions define focus,
+exclusions, depth, and treatment of generated or vendored code.
 
-Apply this skill with:
-- `policy.md` for evaluation standards
-- `workflow.md` for tool-first execution discipline
+## Audit contract
 
-This mode exists because audit work has materially different output constraints, evidence rules, and sequencing from normal implementation work.
+- Execute only the requested phase, stop at its boundary, and wait. Never advance
+  automatically or combine phases.
+- Inspect relevant source, tests, scripts, CI, configuration, and documentation.
+  Anchor factual claims to tool-observed evidence: a path and, where applicable,
+  a symbol. Documentation can establish stated intent, not deployed behavior.
+- Label conclusions not proven by accessible evidence `INFERENCE`. Record excluded,
+  inaccessible, or unreviewed material under `UNREVIEWED/INACCESSIBLE`, including
+  its effect on confidence. Do not guess when tooling or access is missing.
+- Prefer structural or type-aware evidence such as `gopls`; use text search when
+  necessary. Treat an existing `graphify-out/` graph as optional discovery leads,
+  and verify every graph-derived claim in the repository. Do not build a graph as
+  an audit prerequisite.
+- Build inventories before evaluation. Read enough package context to avoid
+  interpreting a symbol in isolation. Reuse prior artifacts, but verify new claims.
+- Output Markdown; fence machine-readable artifacts as `csv` or `json`. Split an
+  oversized artifact into stable, named parts and set `NEXT` to the exact remaining
+  part or step.
 
-## Skill Use
-- Load this skill only when the user explicitly wants a deep Go repository audit or a clearly similar phased review.
-- Treat this skill as the governing audit contract for the turn or session.
-- Keep repository-specific instructions in the invoking prompt.
-- Use this skill phase by phase. Do not treat it as permission to compress the whole audit into one response.
-
-## Tool Use
-This skill is tool-agnostic and works with Claude Code, Codex, OpenCode, and similar assistants. Map its guidance to whatever file-reading, editing, search, and shell-execution tools your environment exposes.
-
-- Every factual claim in an audit must come from a tool invocation, not inference. Read the file, search the symbol, or run the command before writing the finding.
-- Prefer structural or type-aware tooling (LSP, `gopls`) for references and call graphs; fall back to text search only when it is not available.
-- Issue independent tool calls in parallel: inventory scans, symbol lookups, and multi-file reads should be batched.
-- If evidence cannot be gathered, record it under `UNREVIEWED/INACCESSIBLE` rather than guessing.
-
-## When To Use
-Use this skill when the user asks for:
-- a deep Go repository audit
-- phased architecture review
-- function or package accounting
-- observability or security review as part of a broader Go audit
-- evidence-backed grading, modernization, or refactor planning
-
-Do not use this skill for:
-- small patch reviews
-- narrow bug hunts
-- ordinary implementation work
-
-## Required Inputs
-The invoking prompt must provide:
-- repository path or scope
-- exact phase to execute
-
-Recommended inputs:
-- focus areas
-- exclusions
-- depth constraints
-- how to treat generated or vendored code
-- previous phase artifacts or `STATE_SNAPSHOT` when continuing
-
-If scope or phase is missing, stop and ask.
-
-## Operating Stance
-- Prefer evidence over intuition.
-- Describe the system as implemented, not as intended.
-- Stay phase-disciplined.
-- Treat tests, scripts, CI, infra, and docs as first-class evidence.
-- Read enough surrounding package context to avoid symbol-level misinterpretation.
-- If continuation context is provided, use it to resume the requested phase or exact next step, not to skip evidence gathering.
-- Do not collapse multiple phases into one response.
-
-## Evidence Rules
-- Every factual claim must be anchored to a file path and, when applicable, a symbol.
-- Mark any non-provable conclusion as `INFERENCE`.
-- List inaccessible or unreviewed material under `UNREVIEWED/INACCESSIBLE` with impact notes.
-- Do not imply runtime certainty without code, config, test, or runtime evidence.
-
-## Output Contract
-- Output only Markdown.
-- Machine-readable artifacts must be fenced `csv` or `json`.
-- If a hard requirement cannot be met, output exactly:
+A hard failure is the sole exception to the footer requirement. Emit only:
 
 ```text
 ERROR: <short reason>
-BLOCKED_BY: <what is missing>
+BLOCKED_BY: <missing input, evidence, tool, or access>
 ```
 
-## Chunking And Continuation Rules
-- Work only on the requested phase.
-- Stop at the end of the phase boundary.
-- Chunk large artifacts rather than compressing them inaccurately.
-- When a phase is too large for one response, emit the current chunk, preserve artifact part names, and set `NEXT` to the exact remaining step or artifact part.
-- If required information is missing, stop and identify exactly what is missing instead of guessing.
-- End every response with:
+Every successful Phase 1–4 response, and every unfinished Phase 5 chunk, ends with:
 
 ```text
 STATE_SNAPSHOT: (max 8 bullets)
-- <bullet>
+- <completed coverage, evidence limits, and artifact parts>
 
-NEXT: <exact next phase name>
+NEXT: <exact next phase or remaining artifact part>
 ```
 
-## General Audit Method
-1. Establish accessible scope and obvious exclusions.
-2. Read the files relevant to the requested phase before making conclusions.
-3. Build inventories or evidence tables before evaluative claims.
-4. Reuse prior phase artifacts when supplied, but verify any new claims against repository evidence.
-5. Preserve phase boundaries strictly.
+## Phase gates
 
-## Phase Gate Rules
-- Phase 1 may inventory and describe, but must not recommend.
-- Phase 2 may account and index, but must not recommend or grade.
-- Phase 3 may assess architecture and boundary violations, but must not produce detailed remediation plans.
-- Phase 4 may produce prioritized findings with fixes, but must not assign overall grades.
-- Phase 5 may synthesize, grade, prioritize, and plan.
+- Phase 1 inventories and describes; it does not recommend.
+- Phase 2 accounts and indexes; it does not recommend or grade.
+- Phase 3 assesses architecture and boundary violations; it does not provide
+  detailed remediation plans.
+- Phase 4 reports prioritized findings and fixes; it does not assign overall grades.
+- Phase 5 synthesizes, grades, prioritizes, and plans.
 
-## Phase Rules
+## PHASE 1 - Inventory + Entrypoints
 
-### PHASE 1 - Inventory + Entrypoints
-Produce:
-- repository inventory grouped by directory
-- one-line purpose and importance tag for each directory
-- one-line purpose for each file
-- key exported symbols for Go files
-- entrypoints, startup, shutdown, config, and secret source summary where evidenced
-- totals and `UNREVIEWED/INACCESSIBLE`
+Produce a directory-grouped repository inventory with a one-line purpose and
+importance tag for each directory, a one-line purpose for every file, and key
+exported symbols for Go files. Identify evidenced entrypoints, startup and shutdown
+paths, configuration, and secret sources. Report totals and
+`UNREVIEWED/INACCESSIBLE`.
 
-### PHASE 2 - Function Accounting
-Produce exactly:
-- `function_index.csv`
-- `package_index.csv`
+## PHASE 2 - Function Accounting
 
-Rules:
-- one row per function or method, including `init`, `main`, and tests
-- chunk outputs to 500 rows max per file part
-- leave caller or callee fields blank when precision is not supportable and note `INFERENCE`
-- run `golang.org/x/tools/cmd/deadcode` to identify unreachable functions as harder evidence than reference-counting by hand
+Produce exactly `function_index.csv` and `package_index.csv`, using stable part names
+and at most 500 rows per part. Include one row per function or method, including
+`init`, `main`, and tests. Leave caller or callee fields blank when precise analysis
+is unavailable and document the limitation as `INFERENCE`. Run
+`golang.org/x/tools/cmd/deadcode` when available; otherwise record that evidence gap.
 
-### PHASE 3 - Architecture + Data Boundaries
-Using phase 1 and 2 evidence:
-- describe architecture as implemented
-- map ingress and egress
-- identify validation points and missing validation points
-- identify leakage between transport, domain, and persistence
-- assess transaction boundaries, idempotency, and dependency direction
+## PHASE 3 - Architecture + Data Boundaries
 
-### PHASE 4 - Observability + Security Audit
-Review:
-- logging structure and correlation
-- metrics, tracing, health checks, shutdown, drain behavior
-- trust boundaries, authn/authz, input validation, injection risks, path handling, secret handling
+Using Phases 1–2 evidence, describe the implemented architecture; map ingress,
+egress, validation, and missing validation; identify transport/domain/persistence
+leakage; and assess dependency direction, transaction boundaries, and idempotency.
 
-Anchor security findings to tool evidence, consistent with the "every claim from a tool" rule:
-- `govulncheck ./...` for reachability-based CVEs (a vulnerable dependency that is actually called)
-- `gosec` and `staticcheck` output for injection, path, and unsafe-use findings — cite the rule ID and line, not a paraphrase
+## PHASE 4 - Observability + Security Audit
 
-Output findings grouped by `P0`, `P1`, and `P2`, each with:
-- file path
-- symbol
-- evidence
-- concrete fix
+Review structured logging and correlation; metrics, tracing, health checks,
+shutdown, and drain behavior; trust boundaries, authentication, authorization,
+validation, injection, path handling, and secrets. Use available tool evidence such
+as `govulncheck ./...` for reachable vulnerabilities and `gosec`/`staticcheck` for
+source findings; cite rule IDs and locations. If a tool cannot run, record the gap.
 
-### PHASE 5 - Synthesis
-Produce:
-- overall grade `A-F`
-- subgrades for code, architecture, observability, security, testing, performance, modularity, docs/DX
-- anchored justification
-- prioritized refactor recommendations with `P0`, `P1`, and `P2`
-- effort sizing `S`, `M`, `L`
+Group findings by `P0`, `P1`, and `P2`. Each finding includes path, symbol, evidence,
+impact, and a concrete fix.
 
-## Modernization Evidence
-When the audit covers modernization, gather evidence rather than eyeballing. Run the `modernize` analyzer (`gopls`) and `golang.org/x/tools/cmd/deadcode`, and report against this checklist:
-- `log/slog` adoption versus ad-hoc or third-party logging without an `slog.Handler` bridge
-- error wrapping with `%w` and aggregation with `errors.Join`, branching via `errors.Is`/`errors.As` rather than string matching
-- range-over-func iterators (`iter.Seq`/`iter.Seq2`) where channels or slice-builders are used for custom sequences
-- `min`/`max`/`clear` builtins and `for range n` loops versus hand-rolled equivalents
-- generics replacing `interface{}` containers and utility code
-- `go` and `toolchain` directive currency against the supported Go release window
+## PHASE 5 - Synthesis
 
-Cite the analyzer or `deadcode` output as the evidence, not a hand inspection.
+Produce an overall `A`–`F` grade and evidence-backed subgrades for code,
+architecture, observability, security, testing, performance, modularity, and
+docs/DX. Prioritize recommendations as `P0`/`P1`/`P2`, size each `S`/`M`/`L`, and
+provide verification and rollout considerations. A completed Phase 5 ends with
+`FINAL STATE_SNAPSHOT` (at most eight bullets) and `DONE`; an unfinished chunk
+uses the resumable footer above.
 
-## Completion Rule
-An audit response is incomplete if it:
-- mixes phases
-- makes unsupported claims
-- omits required artifacts
-- grades before synthesis
-- recommends fixes before the proper phase
-- omits the continuation footer
+When modernization is in scope, use available `gopls` modernization analysis and
+`deadcode` evidence to assess supported Go/toolchain directives, structured logging,
+error wrapping/inspection, current iteration features and built-ins, and appropriate
+use of generics. Record unavailable analyzers rather than substituting intuition.
 
-## Invocation Template
-Use this skill with a prompt that supplies repository-specific context. Example:
+## Recommendation quality
 
-```text
-Use Go Audit Mode with Go Engineering Policy and Go Engineering Workflow.
-Audit /path/to/repo.
-Execute PHASE 3 - Architecture + Data Boundaries.
-Focus on package direction, shutdown behavior, and queue consumers.
-Summarize generated code instead of expanding it.
-```
-
-## Recommendations Are Architecture: Full Socratic Intent
-Findings are evidence-driven, but a recommendation is a design act — and architectural recommendations are exactly where buried decisions and generic patterns do the most damage. Scale the rigor to the recommendation, not to a fixed template:
-
-- **Architectural output** — a modernization or refactor plan, a new boundary, package split, or dependency, a structural remediation, anything that forecloses future options — gets the **full** `socratic` protocol: the **Synthesis-First Gate** (commit to your own recommendation and red-team it before you present it), the **Decision Ledger** (surface each consequential fork as a weighted choice the user decides, not a pick buried in the report), and the **Depth Audit**.
-- **Localized, evidence-obvious fixes** — a missing nil check, a pinned version, a tightened permission — get the **Depth Audit** alone.
-
-Run the Depth Audit on every recommendation regardless. A recommendation FLAGs when it could be pasted into a different repo unchanged, reaches for a reflex default (add a cache/queue/retry/index/abstraction, split the service, "add rate limiting") without tying it to the evidence you gathered, leans on buzzwords ("scalable", "robust", "idiomatic", "best-practice") in place of a mechanism, or offers no alternative and no "do nothing" cost. Fix the FLAG by anchoring to the evidence, or surface it as an open question — never ship generic advice as a finding.
+Tie every recommendation to evidence and explain its mechanism. For consequential
+architectural changes, compare viable alternatives, tradeoffs, and the cost of no
+change; use a fuller Socratic decision process only when ambiguity warrants it or the
+user requests it. The host controls presentation format. Reject generic advice that
+could apply unchanged to an unrelated repository.
